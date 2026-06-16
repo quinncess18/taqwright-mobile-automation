@@ -1,0 +1,26 @@
+{
+  "name": "taqwright-tests",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "test": "taqwright test",
+    "codegen": "taqwright codegen",
+    "doctor": "taqwright doctor",
+    "devices": "taqwright devices",
+    "report": "taqwright show-report"
+  },
+  "devDependencies": {
+    "@taqwright/taqwright": "latest",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=24.0.0 <26.0.0"
+  },
+  "overrides": {
+    "@wdio/config": {
+      "glob": "^13"
+    }
+  }
+}

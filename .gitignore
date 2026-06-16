@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Test artifacts (also covered per-subdir in taqwright-tests/.gitignore)
+test-results/
+playwright-report/
+
+# App binaries — fetched from taqelah/demo-app releases in CI, kept locally for
+# Android runs. Not committed (159 MB APK + iOS .app).
+app/
+
+# Misc
+*.log
+.DS_Store

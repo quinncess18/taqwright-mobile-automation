@@ -1,0 +1,10 @@
+node_modules
+dist
+test-results
+playwright-report
+.DS_Store
+*.log
+
+# App binaries — fetched from taqelah/demo-app releases in CI, kept locally for
+# Android runs. Not committed (159 MB APK + iOS .app).
+app/
