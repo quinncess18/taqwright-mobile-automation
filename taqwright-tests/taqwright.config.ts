@@ -17,12 +17,18 @@ const IOS_BUNDLE_ID = 'com.taqelah.demoApp';
 
 export default defineConfig({
   testDir: './tests',
-  // 300s (not 120s): on iOS CI the first session must compile/sign
-  // WebDriverAgent, which alone can take ~2min and otherwise trips the test
-  // timeout on TC-L01. Subsequent sessions reuse WDA and finish in seconds;
-  // Android is unaffected (its tests run well under the old budget).
-  timeout: 300_000,
+  // 180s per test — mirrors the reference repo's iOS testTimeout. The cold
+  // first-session WebDriverAgent build (which tripped TC-L01/L02 at ~2min) is
+  // absorbed by `retries` below, the same way the reference handles it, rather
+  // than by inflating per-test/connection timeouts.
+  timeout: 180_000,
   expectTimeout: 30_000,
+  // 2 retries on CI / 1 locally — mirrors the reference repo. This is how the
+  // reference absorbs the one-time WDA cold build on the first iOS session: an
+  // attempt that aborts while WDA is still compiling is retried, and the next
+  // attempt finds WDA already built and passes. A genuine failure fails every
+  // attempt. Android (run locally) gets 1 retry to absorb cold-boot render lag.
+  retries: process.env.CI ? 2 : 1,
   // Mobile/Appium sessions don't tolerate concurrent device access on one
   // emulator — run serially (mirrors the reference repo's workers:1).
   workers: 1,
