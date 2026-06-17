@@ -32,7 +32,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          # taqwright requires Node >=24 — it loads taqwright.config.ts via
+          # Node's native TS type-stripping (added in 23+). On 18 the config
+          # fails with "Unknown file extension .ts". Engines: >=24.0.0 <26.0.0.
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: taqwright-tests/package-lock.json
 
