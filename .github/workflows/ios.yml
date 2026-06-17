@@ -84,6 +84,18 @@ jobs:
       - name: Pre-install app to Simulator
         run: xcrun simctl install "${{ steps.boot-sim.outputs.udid }}" app/Runner.app
 
+      - name: Prebuild WebDriverAgent
+        # Compile/sign WDA once, up front, into the xcuitest driver's default
+        # DerivedData — which the runtime sessions reuse (no derivedDataPath cap
+        # needed, so taqwright.config.ts stays identical to the reference). The
+        # cold WDA build takes ~4min, longer than the 120s session-creation
+        # timeout; without prebuilding, TC-L01 (the one test that coincides with
+        # the cold build) aborts all its attempts while every later session
+        # connects in seconds. build-wda takes --name and --sdk only.
+        run: npx appium driver run xcuitest build-wda --name "${IOS_SIM_NAME}" --sdk "17.5"
+        env:
+          APPIUM_HOME: ${{ github.workspace }}
+
       - name: Start Appium server
         # Started manually (taqwright.config.ts has appium.autoStart:false).
         run: npx appium &
