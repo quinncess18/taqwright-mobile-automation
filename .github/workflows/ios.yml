@@ -85,14 +85,27 @@ jobs:
         run: xcrun simctl install "${{ steps.boot-sim.outputs.udid }}" app/Runner.app
 
       - name: Prebuild WebDriverAgent
-        # Compile/sign WDA once, up front, into the xcuitest driver's default
-        # DerivedData — which the runtime sessions reuse (no derivedDataPath cap
-        # needed, so taqwright.config.ts stays identical to the reference). The
-        # cold WDA build takes ~4min, longer than the 120s session-creation
-        # timeout; without prebuilding, TC-L01 (the one test that coincides with
-        # the cold build) aborts all its attempts while every later session
-        # connects in seconds. build-wda takes --name and --sdk only.
-        run: npx appium driver run xcuitest build-wda --name "${IOS_SIM_NAME}" --sdk "17.5"
+        # Compile/sign WDA once, up front, then hand its build products to the
+        # runtime sessions via the appium:usePrebuiltWDA + appium:derivedDataPath
+        # caps in taqwright.config.ts (gated on the IOS_WDA_DERIVED_DATA_PATH env
+        # exported below). The cold WDA build takes ~4min — longer than the 120s
+        # session-creation timeout — so without reuse TC-L01 (the one test that
+        # coincides with the cold build) aborts its first attempts and only
+        # scrapes through on a retry once the build happens to finish.
+        #
+        # build-wda takes --name and --sdk only (no derivedDataPath flag) and
+        # writes to the standard ~/Library/Developer/Xcode/DerivedData/
+        # WebDriverAgent-<hash> dir, so we resolve that dir afterward and export
+        # it; the runtime then points at the same products and skips the build.
+        # The udid pins the runtime session to the exact booted simulator (the
+        # config's /iPhone 15/ regex otherwise also matches iPhone 15 Pro, etc.).
+        run: |
+          npx appium driver run xcuitest build-wda --name "${IOS_SIM_NAME}" --sdk "17.5"
+          WDA_DD=$(ls -dt "${HOME}/Library/Developer/Xcode/DerivedData/"WebDriverAgent-* | head -1)
+          echo "Prebuilt WDA DerivedData: ${WDA_DD}"
+          test -d "${WDA_DD}/Build/Products" || { echo "WDA products not found under ${WDA_DD}"; exit 1; }
+          echo "IOS_WDA_DERIVED_DATA_PATH=${WDA_DD}" >> "$GITHUB_ENV"
+          echo "IOS_SIM_UDID=${{ steps.boot-sim.outputs.udid }}" >> "$GITHUB_ENV"
         env:
           APPIUM_HOME: ${{ github.workspace }}
 

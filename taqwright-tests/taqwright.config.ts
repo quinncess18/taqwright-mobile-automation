@@ -15,6 +15,26 @@ const IOS_APP = resolve(__dirname, 'app/Runner.app');
 const ANDROID_BUNDLE_ID = 'com.taqelah.demo_app';
 const IOS_BUNDLE_ID = 'com.taqelah.demoApp';
 
+// CI-only: reuse the WebDriverAgent the workflow prebuilds (see
+// .github/workflows/ios.yml "Prebuild WebDriverAgent"). Without this the
+// xcuitest driver cold-builds WDA (~4min) on the first session, overrunning the
+// 120s session-creation timeout — TC-L01 (the test that coincides with the cold
+// build) then only scrapes through on a retry once the build happens to finish.
+// `usePrebuiltWDA` + the shared `derivedDataPath` make the first session skip
+// the build and connect in seconds; `udid` pins the session to the exact booted
+// simulator (the iOS device regex below also matches "iPhone 15 Pro" etc.).
+// Gated on the env the workflow exports, so local Android runs are untouched.
+const IOS_CI_CAPS =
+  process.env.CI && process.env.IOS_WDA_DERIVED_DATA_PATH
+    ? {
+        'appium:usePrebuiltWDA': true,
+        'appium:derivedDataPath': process.env.IOS_WDA_DERIVED_DATA_PATH,
+        ...(process.env.IOS_SIM_UDID
+          ? { 'appium:udid': process.env.IOS_SIM_UDID }
+          : {}),
+      }
+    : {};
+
 export default defineConfig({
   testDir: './tests',
   // 180s per test — mirrors the reference repo's iOS testTimeout. The cold
@@ -89,6 +109,8 @@ export default defineConfig({
         resetBetweenTests: false,
         buildPath: IOS_APP,
         appBundleId: IOS_BUNDLE_ID,
+        // Prebuilt-WDA reuse caps (CI only; empty object locally).
+        capabilities: IOS_CI_CAPS,
 
         trace: 'on-failure',
         video: 'on-failure',
