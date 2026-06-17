@@ -42,6 +42,14 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Install ffmpeg
+        # taqwright's `mobile` fixture starts a per-test screen recording
+        # (video: 'on-failure' captures every test, discarding on pass), which
+        # shells out to ffmpeg. The macos-14 runner has no ffmpeg preinstalled,
+        # so without this every iOS test fails in fixture setup at
+        # appium/start_recording_screen.
+        run: brew install ffmpeg
+
       - name: Install Appium XCUITest driver
         # Pin to xcuitest@7 — 8.x targets Appium 3.x and conflicts with the
         # Appium 2.x line taqwright drives. (Mirrors the reference repo.)

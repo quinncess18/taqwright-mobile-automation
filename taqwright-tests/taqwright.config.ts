@@ -17,7 +17,11 @@ const IOS_BUNDLE_ID = 'com.taqelah.demoApp';
 
 export default defineConfig({
   testDir: './tests',
-  timeout: 120_000,
+  // 300s (not 120s): on iOS CI the first session must compile/sign
+  // WebDriverAgent, which alone can take ~2min and otherwise trips the test
+  // timeout on TC-L01. Subsequent sessions reuse WDA and finish in seconds;
+  // Android is unaffected (its tests run well under the old budget).
+  timeout: 300_000,
   expectTimeout: 30_000,
   // Mobile/Appium sessions don't tolerate concurrent device access on one
   // emulator — run serially (mirrors the reference repo's workers:1).
