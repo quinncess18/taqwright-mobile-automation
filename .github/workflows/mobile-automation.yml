@@ -61,11 +61,27 @@ jobs:
         # Started manually (taqwright.config.ts android has appium.autoStart:false).
         # Backgrounded; it persists into the emulator-runner step below. The
         # emulator need not exist yet — the server only binds a device when a
-        # session starts. --allow-insecure adb_shell mirrors the reference (lets
-        # helpers shell out via adb if a spec needs it).
-        run: npx appium --allow-insecure adb_shell &
+        # session starts. The insecure adb_shell feature mirrors the reference
+        # (lets helpers shell out via adb if a spec needs it). NB `npx appium`
+        # here resolves to Appium 3.x, which changed the --allow-insecure format:
+        # the feature must be scoped to a driver (or '*') with a colon, else the
+        # server REJECTS the flag and never starts (run 27734085275: bare
+        # `adb_shell` crashed startup → every session got ECONNREFUSED).
+        run: npx appium --allow-insecure=uiautomator2:adb_shell &
         env:
           APPIUM_HOME: ${{ github.workspace }}
+
+      - name: Wait for Appium ready
+        # Mirror the iOS lane's readiness gate. The reference omits this on
+        # Android, but it's what makes a server-startup failure fail fast HERE
+        # (with a clear message) instead of cascading into N confusing
+        # ECONNREFUSED test failures inside the emulator-runner step.
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://127.0.0.1:4723/status > /dev/null; then echo "Appium up"; exit 0; fi
+            sleep 1
+          done
+          echo "Appium did not come up"; exit 1
 
       - name: Enable KVM group perms
         # Hardware acceleration for the emulator (mirrors the reference). Uses
