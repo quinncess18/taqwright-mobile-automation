@@ -149,6 +149,22 @@ export class LoginPage extends BasePage {
     await this.passwordToggle.click();
   }
 
+  /**
+   * Make the password field show plaintext regardless of its current toggle
+   * state — an ABSOLUTE ensure, unlike the relative {@link togglePasswordVisibility}
+   * flip. Needed under resetBetweenTests:false: a blind toggle is order-dependent
+   * (e.g. TC-N02 leaving the field visible flips TC-N03 back to masked), which
+   * made N03 flaky on Android (run 27738124896). A masked secure field reads back
+   * as bullets on both platforms, so we toggle only when it's actually masked.
+   */
+  async ensurePasswordVisible(): Promise<void> {
+    const text = await this.readField(this.passwordField);
+    const masked = text.length > 0 && text.split('').every((c) => c === '•');
+    if (masked) {
+      await this.togglePasswordVisibility();
+    }
+  }
+
   async revealDemoCredentials(): Promise<void> {
     if (!(await this.isVisible(this.demoCredentials))) {
       await this.demoCredentials.scrollIntoView();

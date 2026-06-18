@@ -22,7 +22,7 @@ test.describe('Login — Negative', () => {
     await login.waitForPageLoad();
 
     await login.fillCredentials('invalid-user', login.defaultPass);
-    await login.togglePasswordVisibility();
+    await login.ensurePasswordVisible();
     await login.verifyUsername('invalid-user');
     await login.verifyPasswordPlaintext(login.defaultPass);
 
@@ -39,12 +39,14 @@ test.describe('Login — Negative', () => {
 
     await login.fillCredentials(login.defaultUser, 'wrong-pass');
     await login.verifyUsername(login.defaultUser);
-    // Reveal before reading plaintext: on iOS a masked secure field reads back
-    // as bullets via getValue(), so without this the assertion sees "••••••••••"
-    // instead of "wrong-pass". (TC-N02 toggles for the same reason; N03 had been
-    // relying on N02's leftover visible state via the resetBetweenTests:false
-    // chain, which broke once the WDA cold-build retry timing went away.)
-    await login.togglePasswordVisibility();
+    // Reveal before reading plaintext: a masked secure field reads back as
+    // bullets ("••••••••••") on both platforms, so the assertion needs the field
+    // visible. ensurePasswordVisible() is an ABSOLUTE ensure (toggles only when
+    // actually masked), not a blind flip — under resetBetweenTests:false a blind
+    // toggle was order-dependent on the prior test's leftover state (N02 ending
+    // visible flipped N03 back to masked), which made N03 flaky on Android
+    // (run 27738124896, passed only on retry).
+    await login.ensurePasswordVisible();
     await login.verifyPasswordPlaintext('wrong-pass');
 
     await login.submitLogin();
