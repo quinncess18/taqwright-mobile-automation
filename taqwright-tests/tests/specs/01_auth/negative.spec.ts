@@ -39,6 +39,12 @@ test.describe('Login — Negative', () => {
 
     await login.fillCredentials(login.defaultUser, 'wrong-pass');
     await login.verifyUsername(login.defaultUser);
+    // Reveal before reading plaintext: on iOS a masked secure field reads back
+    // as bullets via getValue(), so without this the assertion sees "••••••••••"
+    // instead of "wrong-pass". (TC-N02 toggles for the same reason; N03 had been
+    // relying on N02's leftover visible state via the resetBetweenTests:false
+    // chain, which broke once the WDA cold-build retry timing went away.)
+    await login.togglePasswordVisibility();
     await login.verifyPasswordPlaintext('wrong-pass');
 
     await login.submitLogin();
