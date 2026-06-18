@@ -34,12 +34,12 @@ See [`TEST_PLAN.md`](./TEST_PLAN.md) for the full coverage map and status.
 
 ```
 taqwright-tests/
-  taqwright.config.ts     # android (local) + ios (CI) projects
+  taqwright.config.ts     # android (local + CI) + ios (CI) projects
   tests/
     pages/                # POMs (BasePage, LoginPage, CatalogLandingPage, …)
     specs/01_auth/        # functional.spec.ts, negative.spec.ts
   app/                    # app binaries (gitignored — fetched per below)
-.github/workflows/ios.yml # iOS CI on macos-14
+.github/workflows/mobile-automation.yml # Android + iOS CI (parallel jobs)
 ```
 
 ## Prerequisites
@@ -80,18 +80,34 @@ npx taqwright test --project=android tests/specs/01_auth
 
 `resetBetweenTests: false` — one shared session per run, **mirroring the
 reference repo's `noReset` model**. The auth suite is intentionally
-**order-dependent** (e.g. TC-N03 inherits the visibility toggle from TC-N02;
-the negatives rely on TC-L06's logout to hand back a logged-out screen).
-Stateful slices (Catalog → Checkout) will add per-spec reset helpers, as the
-reference does.
+**order-dependent** (e.g. the negatives rely on TC-L06's logout to hand back a
+logged-out screen). Each test still owns the state it asserts on, though —
+TC-N03 toggles password visibility itself rather than leaning on TC-N02's
+leftover toggle, which kept it green once the iOS WDA timing changed. Stateful
+slices (Catalog → Checkout) will add per-spec reset helpers, as the reference
+does.
 
-## Running (iOS — CI only)
+## Continuous integration (Android + iOS)
 
-iOS needs macOS, so it runs exclusively in GitHub Actions
-([`.github/workflows/ios.yml`](.github/workflows/ios.yml)) on a `macos-14`
-runner: boot an iPhone 15 (iOS 17.5) simulator, `simctl install` the app, start
-Appium (XCUITest driver pinned to `@7`), then `npx taqwright test --project=ios`.
-The app binary is fetched from the public `taqelah/demo-app` release at CI time.
+CI runs both platforms in parallel from a single workflow
+([`.github/workflows/mobile-automation.yml`](.github/workflows/mobile-automation.yml)),
+mirroring the reference repo's combined Android + iOS pipeline. Each job fetches
+the app binary from the public `taqelah/demo-app` release at run time, starts
+Appium manually (`appium.autoStart: false`), and runs the auth slice — scope
+grows per platform as each slice's selectors are verified.
+
+- **Android (Emulator)** — `ubuntu-22.04`, via
+  [`reactivecircus/android-emulator-runner`](https://github.com/ReactiveCircus/android-emulator-runner)
+  (Pixel 6, API 34, `google_apis`/x86_64). Installs the UiAutomator2 driver,
+  `adb install`s the APK, then `npx taqwright test --project=android`. Same
+  emulator config as the local run — both attach to the one running emulator.
+- **iOS (Simulator)** — `macos-14`, boots an iPhone 15 (iOS 17.5) simulator,
+  `simctl install`s the app, pins the XCUITest driver to `@7`, then
+  `npx taqwright test --project=ios`. WebDriverAgent is **prebuilt and
+  preinstalled** so the driver launches it via `usePreinstalledWDA` (no
+  `xcodebuild` at session time) — the first session starts in seconds instead of
+  cold-building WDA. iOS is CI-only: it needs macOS, which this Windows dev
+  machine can't provide.
 
 Selectors branch per platform in the POMs (`this.isAndroid` / `this.isIOS`):
 Flutter `Key()` reaches Android `content-desc` but not iOS

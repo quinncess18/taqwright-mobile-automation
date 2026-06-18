@@ -16,7 +16,7 @@ const ANDROID_BUNDLE_ID = 'com.taqelah.demo_app';
 const IOS_BUNDLE_ID = 'com.taqelah.demoApp';
 
 // CI-only (option b): launch the WebDriverAgent the workflow prebuilds and
-// pre-installs (see .github/workflows/ios.yml "Build & pre-install
+// pre-installs (see .github/workflows/mobile-automation.yml "Build & pre-install
 // WebDriverAgent"), instead of letting the xcuitest driver cold-build it. With
 // appium:usePreinstalledWDA the driver runs the preinstalled runner via
 // simctl/XCTRunner — NO xcodebuild at session time — so the first session starts
@@ -58,7 +58,10 @@ export default defineConfig({
 
   projects: [
     {
-      // Android — runs locally on a booted emulator (Pixel_8, API 35).
+      // Android — runs locally on a booted emulator (Pixel_8, API 35) AND in CI
+      // (.github/workflows/mobile-automation.yml "Android (Emulator)" job, on an
+      // ubuntu-22.04 emulator via reactivecircus/android-emulator-runner). Both
+      // attach to whichever single emulator is already running (name unset).
       name: 'android',
       use: {
         platform: Platform.ANDROID,

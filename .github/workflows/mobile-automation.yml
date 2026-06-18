@@ -1,8 +1,9 @@
-name: Mobile Automation (iOS CI)
+name: Universal Mobile Automation (Android & iOS)
 
-# iOS can't run on the local Windows machine — the simulator needs macOS. This
-# job is the ONLY place the iOS project executes. Android is run locally (see
-# the project README / taqwright.config.ts `android` project).
+# Mirrors the reference repo (taqelah-mobile-automation): one workflow, two
+# independent jobs that run in parallel. Android runs on an ubuntu emulator,
+# iOS on a macos simulator. Locally only Android is run (this Windows machine
+# can't host the iOS simulator); CI is where both lanes execute together.
 
 on:
   push:
@@ -14,12 +15,117 @@ on:
 defaults:
   run:
     # The taqwright project (config, tests, app/) lives in this subdirectory.
+    # NB: this applies to `run:` steps only — the android-emulator-runner action
+    # below runs its `script` at the workspace root, so it cd's in explicitly.
     working-directory: taqwright-tests
 
 jobs:
+  android-test:
+    name: Android (Emulator)
+    runs-on: ubuntu-22.04 # Mirrors the reference: dodges the AppArmor bugs in
+                          # ubuntu-24.04 that break the emulator.
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          # taqwright requires Node >=24 to load taqwright.config.ts via Node's
+          # native TS type-stripping (the reference's Node 18 would fail here).
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: taqwright-tests/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Appium UiAutomator2 driver
+        # Android counterpart of the iOS xcuitest install. The reference ships
+        # the driver as an npm dep; we install it explicitly into APPIUM_HOME so
+        # the manually-started server (appium.autoStart:false) can find it.
+        run: npx appium driver install --source=npm appium-uiautomator2-driver
+        env:
+          APPIUM_HOME: ${{ github.workspace }}
+
+      - name: Download Android app (.apk)
+        # Public pre-release asset — no auth/token needed. buildPath in
+        # taqwright.config.ts resolves to app/DemoApp-v1.1.0-debug.apk.
+        run: |
+          mkdir -p app
+          curl -L "https://github.com/taqelah/demo-app/releases/download/v1.1.0/DemoApp-v1.1.0-debug.apk" -o app/DemoApp-v1.1.0-debug.apk
+          ls -la app/DemoApp-v1.1.0-debug.apk
+
+      - name: Start Appium server
+        # Started manually (taqwright.config.ts android has appium.autoStart:false).
+        # Backgrounded; it persists into the emulator-runner step below. The
+        # emulator need not exist yet — the server only binds a device when a
+        # session starts. --allow-insecure adb_shell mirrors the reference (lets
+        # helpers shell out via adb if a spec needs it).
+        run: npx appium --allow-insecure adb_shell &
+        env:
+          APPIUM_HOME: ${{ github.workspace }}
+
+      - name: Enable KVM group perms
+        # Hardware acceleration for the emulator (mirrors the reference). Uses
+        # absolute paths, so the working-directory default is irrelevant here.
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run Android auth tests
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          APPIUM_HOME: ${{ github.workspace }}
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            # The action runs this script at the workspace root, NOT the
+            # workflow's working-directory default — cd into the taqwright project.
+            cd "$GITHUB_WORKSPACE/taqwright-tests"
+            # Install the app the noReset session attaches to (a fresh emulator
+            # has nothing installed; taqwright with resetBetweenTests:false won't
+            # install it for us).
+            adb install app/DemoApp-v1.1.0-debug.apk
+            # Mirror the reference's CI-emulator mitigations (all `|| true`,
+            # harmless to the auth slice if unneeded): grant io.appium.settings
+            # location (its ForegroundService needs it on API 34+ or the Appium
+            # instrumentation init throws) and suppress system ANR/crash dialogs
+            # that can overlay the login fields on a cold-boot runner.
+            adb shell pm grant io.appium.settings android.permission.ACCESS_FINE_LOCATION || true
+            adb shell pm grant io.appium.settings android.permission.ACCESS_COARSE_LOCATION || true
+            adb shell settings put global hide_error_dialogs 1 || true
+            # Scope mirrors the iOS lane — auth only for now; grows as each slice
+            # gets verified. CI=true is already set by GitHub, but pass it through
+            # explicitly so taqwright's retries:CI?2:1 is unambiguous in-script.
+            CI=true npx taqwright test --project=android tests/specs/01_auth
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: taqwright-report-android
+          path: taqwright-tests/playwright-report/
+          retention-days: 30
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-android
+          path: taqwright-tests/test-results/
+          retention-days: 30
+
   ios-test:
     name: iOS (Simulator)
     runs-on: macos-14 # Apple Silicon; matches the .app's arm64 simulator slice.
+    # Independent of the Android job — runs in parallel, doesn't block on it.
 
     env:
       IOS_SIM_NAME: "iPhone 15"

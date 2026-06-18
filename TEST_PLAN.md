@@ -10,18 +10,21 @@ extends it with surface that only exists in the **v1.1.0** app build.
 repo is pinned to v1.0.0. v1.1.0 adds planted bugs, a login-bypass deep link, and
 debuggable WebView DOM (see the 🆕 rows below and `README.md`).
 
-**Platforms:** Android emulator (Pixel 8, API 35) run **locally**; iOS Simulator
-(iPhone 15, iOS 17.5) run **in CI only** (`macos-14`, see `.github/workflows/ios.yml`).
-Specs are shared cross-platform — one POM per screen, selectors branch via
+**Platforms:** Android emulator (Pixel 8, API 35) run **locally** and **in CI**
+(`ubuntu-22.04`, Pixel 6 / API 34); iOS Simulator (iPhone 15, iOS 17.5) run **in
+CI only** (`macos-14` — needs macOS, unavailable on the Windows dev machine).
+Both lanes run in parallel from one workflow
+(`.github/workflows/mobile-automation.yml`), mirroring the reference repo. Specs
+are shared cross-platform — one POM per screen, selectors branch via
 `this.isAndroid` / `this.isIOS`.
 
 > Status legend: ✅ Verified · ⚠️ In progress / CI pending · ⏳ Pending (planned) · ⏭ Skipped (platform-incompatible) · 🆕 New vs the v1.0.0 reference
 
 ## Build status
 
-| Slice | Android (local) | iOS (CI) |
+| Slice | Android (local + CI) | iOS (CI) |
 |---|:---:|:---:|
-| §1 Auth | ✅ 9/9 green (reset:false) | ⚠️ written, first CI run pending |
+| §1 Auth | ✅ 9/9 green local (reset:false); ⚠️ first CI run pending | ✅ 8 pass / 1 skipped, green |
 | §0 Smoke, §2–§16 | ⏳ Pending | ⏳ Pending |
 
 Auth is the first slice (proves the stack end-to-end). Remaining slices follow
@@ -60,15 +63,15 @@ preserved on Home / cleared on Back (L03/L04); login + session-aware logout
 
 | Test ID | Description | Android | iOS |
 | :--- | :--- | :---: | :---: |
-| **TC-L01** | Login page elements visible | ✅ | ⚠️ |
-| **TC-L02** | Toggle password visibility, layout stable | ✅ | ⚠️ |
-| **TC-L03** | Preserve credential state when backgrounded (Home) | ✅ | ⚠️ |
+| **TC-L01** | Login page elements visible | ✅ | ✅ |
+| **TC-L02** | Toggle password visibility, layout stable | ✅ | ✅ |
+| **TC-L03** | Preserve credential state when backgrounded (Home) | ✅ | ✅ |
 | **TC-L04** | Clear unsaved credential state when exited (Back) — Android-only | ✅ | ⏭ |
-| **TC-L05** | Successful login with valid demo credentials | ✅ | ⚠️ |
-| **TC-L06** | Session persists across process kill, then logout | ✅ | ⚠️ |
-| **TC-N01** | Validation errors when fields are empty | ✅ | ⚠️ |
-| **TC-N02** | Error for invalid username format | ✅ | ⚠️ |
-| **TC-N03** | Error for valid username with invalid password | ✅ | ⚠️ |
+| **TC-L05** | Successful login with valid demo credentials | ✅ | ✅ |
+| **TC-L06** | Session persists across process kill, then logout | ✅ | ✅ |
+| **TC-N01** | Validation errors when fields are empty | ✅ | ✅ |
+| **TC-N02** | Error for invalid username format | ✅ | ✅ |
+| **TC-N03** | Error for valid username with invalid password | ✅ | ✅ |
 | **🆕 TC-L07** | Valid deep link (`demoapp://login?...`) bypasses form → `/home` | ⏳ | ⏳ |
 | **🆕 TC-N04** | Invalid deep link → `/login` + "Invalid deeplink credentials" snackbar | ⏳ | ⏳ |
 
