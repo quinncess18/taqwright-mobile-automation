@@ -84,17 +84,43 @@ jobs:
       - name: Pre-install app to Simulator
         run: xcrun simctl install "${{ steps.boot-sim.outputs.udid }}" app/Runner.app
 
-      - name: Prebuild WebDriverAgent
-        # Warm-up: compile/sign WDA once, up front, into the xcuitest driver's
-        # default DerivedData. The first runtime session still runs
-        # build-for-testing, but it's incremental against this cache rather than
-        # a cold ~4min build. The session-creation wait itself is handled by
-        # taqwright.config.ts's appium.connectionTimeout (300s) — long enough for
-        # the build to finish on attempt 1, so TC-L01 no longer relies on a retry.
-        # build-wda takes --name and --sdk only.
-        # (Reusing the prebuilt WDA via appium:usePrebuiltWDA + derivedDataPath
-        # was tried and failed with xcodebuild code 70 — see git history.)
-        run: npx appium driver run xcuitest build-wda --name "${IOS_SIM_NAME}" --sdk "17.5"
+      - name: Build & pre-install WebDriverAgent
+        # Option (b): skip the runtime xcodebuild entirely. build-wda compiles
+        # WDA once, up front; we then locate the built runner app and pre-install
+        # it on the booted simulator. taqwright.config.ts (CI-gated on the env
+        # exported here) sets appium:usePreinstalledWDA + appium:prebuiltWDAPath,
+        # which makes the xcuitest driver LAUNCH the preinstalled runner via
+        # simctl/XCTRunner with NO xcodebuild at session time. The first session
+        # then starts in seconds instead of cold-building WDA (~4min) — that cold
+        # build is what overran the 180s per-test timeout and made TC-L01 abort
+        # on attempt 1 and only pass on a retry.
+        #
+        # Why this over the earlier tries: appium:usePrebuiltWDA (run 27667598454)
+        # still drives WDA via `xcodebuild test-without-building` → code 70; the
+        # appium.connectionTimeout:300s bump (run 27691328617) was moot because
+        # the 180s TEST timeout fires first. usePreinstalledWDA is the only path
+        # that removes xcodebuild from the session (iOS 17+ only; our sim is 17.5).
+        #
+        # build-wda takes --name/--sdk only and writes to the standard
+        # ~/Library/Developer/Xcode/DerivedData/WebDriverAgent-<hash> dir; we
+        # resolve the runner .app under Build/Products/Debug-iphonesimulator and
+        # export its path + the booted udid (which also pins the session, since
+        # the config's /iPhone 15/ regex would otherwise match iPhone 15 Pro too).
+        run: |
+          npx appium driver run xcuitest build-wda --name "${IOS_SIM_NAME}" --sdk "17.5"
+          WDA_DD=$(ls -dt "${HOME}/Library/Developer/Xcode/DerivedData/"WebDriverAgent-* | head -1)
+          WDA_APP="${WDA_DD}/Build/Products/Debug-iphonesimulator/WebDriverAgentRunner-Runner.app"
+          if [ ! -d "${WDA_APP}" ]; then
+            echo "WDA runner app not found at ${WDA_APP}"
+            ls -la "${WDA_DD}/Build/Products/Debug-iphonesimulator/" || true
+            exit 1
+          fi
+          echo "Prebuilt WDA runner: ${WDA_APP}"
+          # Pre-install so the driver's session-time launch is instant (moves the
+          # install cost out of the timed session).
+          xcrun simctl install "${{ steps.boot-sim.outputs.udid }}" "${WDA_APP}"
+          echo "IOS_WDA_APP_PATH=${WDA_APP}" >> "$GITHUB_ENV"
+          echo "IOS_SIM_UDID=${{ steps.boot-sim.outputs.udid }}" >> "$GITHUB_ENV"
         env:
           APPIUM_HOME: ${{ github.workspace }}
 

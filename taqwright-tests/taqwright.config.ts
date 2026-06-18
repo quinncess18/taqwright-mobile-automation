@@ -15,6 +15,27 @@ const IOS_APP = resolve(__dirname, 'app/Runner.app');
 const ANDROID_BUNDLE_ID = 'com.taqelah.demo_app';
 const IOS_BUNDLE_ID = 'com.taqelah.demoApp';
 
+// CI-only (option b): launch the WebDriverAgent the workflow prebuilds and
+// pre-installs (see .github/workflows/ios.yml "Build & pre-install
+// WebDriverAgent"), instead of letting the xcuitest driver cold-build it. With
+// appium:usePreinstalledWDA the driver runs the preinstalled runner via
+// simctl/XCTRunner — NO xcodebuild at session time — so the first session starts
+// in seconds rather than overrunning the 180s per-test timeout (which is what
+// made TC-L01 abort on attempt 1 and only pass on a retry). prebuiltWDAPath lets
+// the driver (re)install the runner if missing; udid pins the session to the
+// exact booted sim. iOS 17+ only — our sim is 17.5. Gated on the env the
+// workflow exports, so local Android runs are untouched.
+const IOS_CI_CAPS =
+  process.env.CI && process.env.IOS_WDA_APP_PATH
+    ? {
+        'appium:usePreinstalledWDA': true,
+        'appium:prebuiltWDAPath': process.env.IOS_WDA_APP_PATH,
+        ...(process.env.IOS_SIM_UDID
+          ? { 'appium:udid': process.env.IOS_SIM_UDID }
+          : {}),
+      }
+    : {};
+
 export default defineConfig({
   testDir: './tests',
   // 180s per test — mirrors the reference repo's iOS testTimeout. The cold
@@ -85,21 +106,18 @@ export default defineConfig({
           host: '127.0.0.1',
           port: 4723,
           path: '/',
-          // Raise the session-creation timeout (→ webdriverio's
-          // connectionRetryTimeout) to 300s. The first iOS session cold-builds
-          // WebDriverAgent (~4min, even with the workflow's prebuild warm-up,
-          // since the xcuitest driver re-runs build-for-testing per session);
-          // the default 120s aborted mid-build, so TC-L01 (the test that
-          // coincides with the cold build) only scraped through on a retry.
-          // 300s > the ~4min build, so the first session now waits it out and
-          // connects on attempt 1. iOS is CI-only, so this never affects local
-          // Android runs. (Reuse via usePrebuiltWDA was tried and failed with
-          // xcodebuild code 70 — see git history.)
+          // Fallback session-creation timeout (→ webdriverio's
+          // connectionRetryTimeout), 300s. With usePreinstalledWDA (below) the
+          // first session no longer cold-builds WDA, so this should not be the
+          // binding constraint anymore; kept as a safety margin in case the
+          // preinstalled-WDA launch path is ever not taken.
           connectionTimeout: 300_000,
         },
         resetBetweenTests: false,
         buildPath: IOS_APP,
         appBundleId: IOS_BUNDLE_ID,
+        // Preinstalled-WDA caps (CI only; empty object locally) — see IOS_CI_CAPS.
+        capabilities: IOS_CI_CAPS,
 
         trace: 'on-failure',
         video: 'on-failure',
