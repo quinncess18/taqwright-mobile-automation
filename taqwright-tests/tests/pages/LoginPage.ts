@@ -67,7 +67,13 @@ export class LoginPage extends BasePage {
   }
 
   async waitForPageLoad(): Promise<void> {
-    await this.waitVisible(this.title);
+    // The very first call in a CI run is the app's cold launch on a freshly
+    // booted emulator, where Flutter's first frame can lag well past the 15s
+    // default — that race made the whole Android suite time out here (every
+    // test, run 27739963199, twice). Give the title a generous CI-only window;
+    // once the app is up the field check below stays snappy. Local runs keep
+    // the tight default.
+    await this.waitVisible(this.title, process.env.CI ? 60_000 : 15_000);
     // The AppBar title paints before the form fields land in the a11y tree on a
     // cold boot — anchor on the field every caller asserts next.
     await this.waitVisible(this.usernameField);

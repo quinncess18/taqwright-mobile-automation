@@ -108,6 +108,13 @@ jobs:
           # taqwright project.
           working-directory: taqwright-tests
           script: |
+            # Wait until the OS finished booting before touching it — the action
+            # reports the device "ready" once adb connects, but the framework can
+            # still be coming up. Without this the app's cold launch raced
+            # Flutter's first frame and the whole suite timed out in
+            # waitForPageLoad (run 27739963199, all 9 tests, twice).
+            adb wait-for-device
+            until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; do sleep 2; done
             # Install the app the noReset session attaches to (a fresh emulator
             # has nothing installed; taqwright with resetBetweenTests:false won't
             # install it for us).
@@ -120,6 +127,13 @@ jobs:
             adb shell pm grant io.appium.settings android.permission.ACCESS_FINE_LOCATION || true
             adb shell pm grant io.appium.settings android.permission.ACCESS_COARSE_LOCATION || true
             adb shell settings put global hide_error_dialogs 1 || true
+            # Warm the app's first frame BEFORE the timed session: cold-launch it
+            # once and let it settle (with hide_error_dialogs already set so any
+            # launcher ANR can't overlay it). taqwright's noReset session then
+            # attaches to an already-warm app instead of paying the cold-start
+            # cost inside TC-L01's waitForPageLoad.
+            adb shell monkey -p com.taqelah.demo_app -c android.intent.category.LAUNCHER 1 || true
+            sleep 10
             # Scope mirrors the iOS lane — auth only for now; grows as each slice
             # gets verified. CI=true is already set by GitHub, but pass it through
             # explicitly so taqwright's retries:CI?2:1 is unambiguous in-script.
