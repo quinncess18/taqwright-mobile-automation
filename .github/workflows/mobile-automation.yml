@@ -85,10 +85,13 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
+          # The action runs each script LINE as a separate `sh -c`, so a bare
+          # `cd` doesn't carry over (the first run failed here: adb install from
+          # the workspace root couldn't find app/). Set the cwd for the whole
+          # script via the action's own input so relative paths resolve into the
+          # taqwright project.
+          working-directory: taqwright-tests
           script: |
-            # The action runs this script at the workspace root, NOT the
-            # workflow's working-directory default — cd into the taqwright project.
-            cd "$GITHUB_WORKSPACE/taqwright-tests"
             # Install the app the noReset session attaches to (a fresh emulator
             # has nothing installed; taqwright with resetBetweenTests:false won't
             # install it for us).
