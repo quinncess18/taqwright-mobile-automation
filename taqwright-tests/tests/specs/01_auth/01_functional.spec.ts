@@ -2,9 +2,10 @@ import { test, expect } from '@taqwright/taqwright';
 import { LoginPage } from '../../pages/LoginPage.js';
 import { CatalogLandingPage } from '../../pages/CatalogLandingPage.js';
 
-// resetBetweenTests:true reinstalls + relaunches the app before every test, so
-// each TC is fully self-contained (no cross-test state cascade like the WDIO
-// reference's single-session chain).
+// resetBetweenTests:false — one shared session for the whole run, mirroring the
+// reference repo's noReset chain. The suite is intentionally order-dependent
+// (e.g. TC-L06 arrives already logged in from TC-L05); each TC still owns the
+// state it asserts on. See README "Test isolation".
 test.describe('Login — Functional', () => {
   test('TC-L01: login page elements are visible', async ({ mobile }) => {
     const login = new LoginPage(mobile);

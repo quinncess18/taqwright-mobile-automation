@@ -24,6 +24,7 @@ export class LoginPage extends BasePage {
   readonly usernameFieldError: Locator;
   readonly passwordFieldError: Locator;
   readonly passwordToggle: Locator;
+  readonly deepLinkError: Locator;
 
   // Universal truths (demo credentials).
   readonly defaultUser = 'emma@demoapp.com';
@@ -32,6 +33,9 @@ export class LoginPage extends BasePage {
   readonly errUsernameRequired = 'Please enter your username';
   readonly errPasswordRequired = 'Please enter your password';
   readonly errInvalidCreds = 'Invalid username or password';
+  // v1.1.0 login-bypass deep link (demoapp://login?username=&password=): bad
+  // creds route back to /login with this snackbar (README "Login-bypass deep link").
+  readonly errInvalidDeepLink = 'Invalid deeplink credentials';
 
   constructor(mobile: Mobile) {
     super(mobile);
@@ -63,6 +67,15 @@ export class LoginPage extends BasePage {
         'new UiSelector().className("android.widget.EditText").instance(1).childSelector(new UiSelector().className("android.widget.Button"))',
       ),
       () => mobile.getByPredicate('type == "XCUIElementTypeButton" AND name == nil AND visible == 1'),
+    );
+
+    // Flutter renders the snackbar text into the a11y tree as content-desc on
+    // Android / name on iOS (same as mainError above — NOT the `text` attribute,
+    // so getByText would miss it). Match by substring to tolerate any surrounding
+    // chrome the snackbar adds.
+    this.deepLinkError = this.pick(
+      () => mobile.getByUiSelector('new UiSelector().descriptionContains("Invalid deeplink credentials")'),
+      () => mobile.getByPredicate('name CONTAINS "Invalid deeplink credentials"'),
     );
   }
 
@@ -184,6 +197,17 @@ export class LoginPage extends BasePage {
   async login(username: string | null, password: string | null): Promise<void> {
     await this.fillCredentials(username, password);
     await this.submitLogin();
+  }
+
+  /**
+   * Fire the v1.1.0 login-bypass deep link `demoapp://login?username=&password=`.
+   * Valid creds jump straight to the catalog (/home); invalid creds route to
+   * /login and surface {@link deepLinkError}. Delegates to taqwright's
+   * `mobile: deepLink` (Android `am start -a VIEW`; iOS URL open).
+   */
+  async openLoginDeepLink(username: string, password: string): Promise<void> {
+    const url = `demoapp://login?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+    await this.mobile.openDeepLink(url, this.bundleId);
   }
 
   /** Open the drawer and tap Logout. */

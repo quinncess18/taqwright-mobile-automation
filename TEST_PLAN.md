@@ -24,7 +24,7 @@ are shared cross-platform — one POM per screen, selectors branch via
 
 | Slice | Android (local + CI) | iOS (CI) |
 |---|:---:|:---:|
-| §1 Auth | ✅ 9/9 green local (reset:false); ⚠️ first CI run pending | ✅ 8 pass / 1 skipped, green |
+| §1 Auth | ✅ 11/11 green local (reset:false); CI green (L07/N04 land next push) | ✅ 8 pass / 1 skipped green; ⚠️ L07/N04 CI-pending |
 | §0 Smoke, §2–§16 | ⏳ Pending | ⏳ Pending |
 
 Auth is the first slice (proves the stack end-to-end). Remaining slices follow
@@ -55,7 +55,7 @@ nav/dialog/form/etc. modules, with the v1.1.0 additions layered in.
 
 ## 1. Authentication Module
 
-**Specs:** `tests/specs/01_auth/functional.spec.ts` + `negative.spec.ts`
+**Specs:** `tests/specs/01_auth/01_functional.spec.ts` + `02_negative.spec.ts` + `03_deeplink.spec.ts`
 
 **Scope:** login render + password-toggle stability (L01/L02); credential state
 preserved on Home / cleared on Back (L03/L04); login + session-aware logout
@@ -72,8 +72,8 @@ preserved on Home / cleared on Back (L03/L04); login + session-aware logout
 | **TC-N01** | Validation errors when fields are empty | ✅ | ✅ |
 | **TC-N02** | Error for invalid username format | ✅ | ✅ |
 | **TC-N03** | Error for valid username with invalid password | ✅ | ✅ |
-| **🆕 TC-L07** | Valid deep link (`demoapp://login?...`) bypasses form → `/home` | ⏳ | ⏳ |
-| **🆕 TC-N04** | Invalid deep link → `/login` + "Invalid deeplink credentials" snackbar | ⏳ | ⏳ |
+| **🆕 TC-L07** | Valid deep link (`demoapp://login?...`) bypasses form → `/home` | ✅ | ⚠️ |
+| **🆕 TC-N04** | Invalid deep link → `/login` + "Invalid deeplink credentials" snackbar | ✅ | ⚠️ |
 
 ## 2. Catalog Module
 

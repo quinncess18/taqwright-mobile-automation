@@ -37,15 +37,17 @@ taqwright-tests/
   taqwright.config.ts     # android (local + CI) + ios (CI) projects
   tests/
     pages/                # POMs (BasePage, LoginPage, CatalogLandingPage, …)
-    specs/01_auth/        # functional.spec.ts, negative.spec.ts
+    specs/01_auth/        # 01_functional, 02_negative, 03_deeplink (.spec.ts)
   app/                    # app binaries (gitignored — fetched per below)
 .github/workflows/mobile-automation.yml # Android + iOS CI (parallel jobs)
 ```
 
 ## Prerequisites
 
-Node 18+, the Android SDK/JDK, and Appium are expected to be set up already
-(bootcamp prereqs). Verify rather than reinstall:
+Node 24 (taqwright's `engines` requires `>=24 <26` — it loads the `.ts` config
+via Node's native TS type-stripping, which 18 lacks), the Android SDK/JDK, and
+Appium are expected to be set up already (bootcamp prereqs). Verify rather than
+reinstall:
 
 ```bash
 cd taqwright-tests

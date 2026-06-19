@@ -27,10 +27,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           # taqwright requires Node >=24 to load taqwright.config.ts via Node's
           # native TS type-stripping (the reference's Node 18 would fail here).
@@ -61,13 +61,13 @@ jobs:
         # Started manually (taqwright.config.ts android has appium.autoStart:false).
         # Backgrounded; it persists into the emulator-runner step below. The
         # emulator need not exist yet — the server only binds a device when a
-        # session starts. The insecure adb_shell feature mirrors the reference
-        # (lets helpers shell out via adb if a spec needs it). NB `npx appium`
-        # here resolves to Appium 3.x, which changed the --allow-insecure format:
-        # the feature must be scoped to a driver (or '*') with a colon, else the
-        # server REJECTS the flag and never starts (run 27734085275: bare
-        # `adb_shell` crashed startup → every session got ECONNREFUSED).
-        run: npx appium --allow-insecure=uiautomator2:adb_shell &
+        # session starts. No --allow-insecure: nothing in the auth slice shells
+        # out via Appium (the emulator-runner script runs adb directly), so the
+        # reference's adb_shell feature is unneeded. (NB it's also a footgun on
+        # Appium 3.x, which `npx appium` resolves to here: the bare
+        # `--allow-insecure adb_shell` form is rejected and crashes startup —
+        # run 27734085275. Re-add as `<driver>:adb_shell` only when a spec needs it.)
+        run: npx appium &
         env:
           APPIUM_HOME: ${{ github.workspace }}
 
@@ -140,7 +140,7 @@ jobs:
             CI=true npx taqwright test --project=android tests/specs/01_auth
 
       - name: Upload report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: taqwright-report-android
@@ -148,11 +148,14 @@ jobs:
           retention-days: 30
 
       - name: Upload test artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: test-results-android
           path: taqwright-tests/test-results/
+          # A fully-green run writes nothing here (per-test artifacts are
+          # failure/retry-only), so don't warn when the dir is empty.
+          if-no-files-found: ignore
           retention-days: 30
 
   ios-test:
@@ -166,10 +169,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           # taqwright requires Node >=24 — it loads taqwright.config.ts via
           # Node's native TS type-stripping (added in 23+). On 18 the config
@@ -283,7 +286,7 @@ jobs:
         run: npx taqwright test --project=ios tests/specs/01_auth
 
       - name: Upload report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: taqwright-report-ios
@@ -291,9 +294,11 @@ jobs:
           retention-days: 30
 
       - name: Upload test artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: test-results-ios
           path: taqwright-tests/test-results/
+          # Empty on a fully-green run (see the android twin) — don't warn.
+          if-no-files-found: ignore
           retention-days: 30
