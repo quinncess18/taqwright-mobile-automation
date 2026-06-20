@@ -36,8 +36,10 @@ See [`TEST_PLAN.md`](./TEST_PLAN.md) for the full coverage map and status.
 taqwright-tests/
   taqwright.config.ts     # android (local + CI) + ios (CI) projects
   tests/
-    pages/                # POMs (BasePage, LoginPage, CatalogLandingPage, …)
+    pages/                # POMs (BasePage, LoginPage, CatalogLandingPage, ProductGridPage, CartPage, …)
     specs/01_auth/        # 01_functional, 02_negative, 03_deeplink (.spec.ts)
+    specs/02_catalog/     # 01_landing (C01–C07), 02_categories (C08–C11)
+    data/                 # products.ts (typed 32-item catalog: counts, names, prices, sort anchors)
   app/                    # app binaries (gitignored — fetched per below)
 .github/workflows/mobile-automation.yml # Android + iOS CI (parallel jobs)
 ```
@@ -75,8 +77,14 @@ iOS cannot run locally on Windows; Android is the local target.
 ```bash
 npx appium                 # in its own terminal; confirm http://127.0.0.1:4723/
 # with a Pixel emulator booted:
-npx taqwright test --project=android tests/specs/01_auth
+npx taqwright test --project=android tests/specs/01_auth tests/specs/02_catalog
 ```
+
+> **Run the Catalog slice _from auth_.** Catalog tests assume a warm, logged-in
+> session, so run them after the auth specs (TC-L01 absorbs the emulator
+> cold-boot). The shared `noReset` session also means a prior catalog run leaves
+> the app logged in — reset to a clean login screen between full-from-auth runs
+> with `adb shell pm clear com.taqelah.demo_app`.
 
 ### Test isolation
 
@@ -85,9 +93,11 @@ reference repo's `noReset` model**. The auth suite is intentionally
 **order-dependent** (e.g. the negatives rely on TC-L06's logout to hand back a
 logged-out screen). Each test still owns the state it asserts on, though —
 TC-N03 toggles password visibility itself rather than leaning on TC-N02's
-leftover toggle, which kept it green once the iOS WDA timing changed. Stateful
-slices (Catalog → Checkout) will add per-spec reset helpers, as the reference
-does.
+leftover toggle, which kept it green once the iOS WDA timing changed. The
+Catalog slice follows the same model — its category spec re-establishes Home via
+a `deviceBack`-to-Home recovery in `beforeEach`, and the landing spec logs in
+once via a module-level flag; later stateful slices (Checkout) add per-spec
+reset helpers as the reference does.
 
 ## Continuous integration (Android + iOS)
 
@@ -95,8 +105,8 @@ CI runs both platforms in parallel from a single workflow
 ([`.github/workflows/mobile-automation.yml`](.github/workflows/mobile-automation.yml)),
 mirroring the reference repo's combined Android + iOS pipeline. Each job fetches
 the app binary from the public `taqelah/demo-app` release at run time, starts
-Appium manually (`appium.autoStart: false`), and runs the auth slice — scope
-grows per platform as each slice's selectors are verified.
+Appium manually (`appium.autoStart: false`), and runs the auth + catalog slices
+— scope grows per platform as each slice's selectors are verified.
 
 - **Android (Emulator)** — `ubuntu-22.04`, via
   [`reactivecircus/android-emulator-runner`](https://github.com/ReactiveCircus/android-emulator-runner)

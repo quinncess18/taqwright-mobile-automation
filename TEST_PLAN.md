@@ -24,8 +24,9 @@ are shared cross-platform — one POM per screen, selectors branch via
 
 | Slice | Android (local + CI) | iOS (CI) |
 |---|:---:|:---:|
-| §1 Auth | ✅ 11/11 green local (reset:false); CI green (L07/N04 land next push) | ✅ 8 pass / 1 skipped green; ⚠️ L07/N04 CI-pending |
-| §0 Smoke, §2–§16 | ⏳ Pending | ⏳ Pending |
+| §1 Auth | ✅ 11/11 green local (reset:false); CI green incl. L07/N04 | ✅ 10 pass / 1 skipped (TC-L04) green incl. L07/N04 |
+| §2 Catalog | ⚠️ 11/11 green local from auth (0 flaky); incl. per-card cart-icon checks; CI pending | ⚠️ CI pending (iOS-specific selectors + cart-icon nesting unverified) |
+| §0 Smoke, §3–§16 | ⏳ Pending | ⏳ Pending |
 
 Auth is the first slice (proves the stack end-to-end). Remaining slices follow
 the reference's build order: Catalog → Product/Add → Cart → Checkout, then the
@@ -72,23 +73,33 @@ preserved on Home / cleared on Back (L03/L04); login + session-aware logout
 | **TC-N01** | Validation errors when fields are empty | ✅ | ✅ |
 | **TC-N02** | Error for invalid username format | ✅ | ✅ |
 | **TC-N03** | Error for valid username with invalid password | ✅ | ✅ |
-| **🆕 TC-L07** | Valid deep link (`demoapp://login?...`) bypasses form → `/home` | ✅ | ⚠️ |
-| **🆕 TC-N04** | Invalid deep link → `/login` + "Invalid deeplink credentials" snackbar | ✅ | ⚠️ |
+| **🆕 TC-L07** | Valid deep link (`demoapp://login?...`) bypasses form → `/home` | ✅ | ✅ |
+| **🆕 TC-N04** | Invalid deep link → `/login` + "Invalid deeplink credentials" snackbar | ✅ | ✅ |
 
 ## 2. Catalog Module
 
-**Specs (planned):** `02_catalog/01_landing.spec.ts` + `02_categories.spec.ts`
+**Specs:** `02_catalog/01_landing.spec.ts` (C01–C07) + `02_categories.spec.ts` (C08–C11)
+
+**Scope:** homepage UI + adaptive scroll (C01); cart empty-state from home/grid (C02/C06);
+"All Dresses" default state + "View All" routing (C03/C07); full 32-item and per-category
+data-integrity scans (C04, C08–C11); all four sort modes via anchor truths (C05).
+
+**Data-integrity scans verify four dimensions per product set — item count, names,
+prices, and the per-card cart icon.** The cart-icon check (each product card container
+exposes its add-to-cart icon) is an **extension beyond the reference mirror** (the reference
+verifies count/names/prices only; behavioral add-to-cart lives in §12). Scans use a single
+`getPageSource()` parse per scroll frame (the per-element scan crashed UiAutomator2 under load).
 
 | Test ID | Description | Android | iOS |
 | :--- | :--- | :---: | :---: |
-| **TC-C01** | Homepage default state, scroll to last category, reset to top | ⏳ | ⏳ |
-| **TC-C02** | Cart empty state from Homepage | ⏳ | ⏳ |
-| **TC-C03** | "All Dresses" page default state | ⏳ | ⏳ |
-| **TC-C04** | Full catalog data integrity (32-item scan vs `products` data) | ⏳ | ⏳ |
-| **TC-C05** | All four sorting modes | ⏳ | ⏳ |
-| **TC-C06** | Cart empty state from Grid | ⏳ | ⏳ |
-| **TC-C07** | "View All" hyperlink routing | ⏳ | ⏳ |
-| **TC-C08–C11** | Casual / Evening / Party / Boho data + sort + cart integrity | ⏳ | ⏳ |
+| **TC-C01** | Homepage default state, scroll to last category, reset to top | ⚠️ | ⚠️ |
+| **TC-C02** | Cart empty state from Homepage | ⚠️ | ⚠️ |
+| **TC-C03** | "All Dresses" page default state | ⚠️ | ⚠️ |
+| **TC-C04** | Full catalog data integrity (32-item scan vs `products`: count + names + per-card cart icon) | ⚠️ | ⚠️ |
+| **TC-C05** | All four sorting modes (anchor truths) | ⚠️ | ⚠️ |
+| **TC-C06** | Cart empty state from Grid | ⚠️ | ⚠️ |
+| **TC-C07** | "View All" hyperlink routing | ⚠️ | ⚠️ |
+| **TC-C08–C11** | Casual / Evening / Party / Boho data (count + names + prices + per-card cart icon) + sort + cart integrity | ⚠️ | ⚠️ |
 
 ## 3. Navigation & Gestures
 

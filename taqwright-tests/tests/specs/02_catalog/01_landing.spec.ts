@@ -1,0 +1,151 @@
+import { test, expect, Mobile } from '@taqwright/taqwright';
+import { LoginPage } from '../../pages/LoginPage.js';
+import { CatalogLandingPage } from '../../pages/CatalogLandingPage.js';
+import { ProductGridPage } from '../../pages/ProductGridPage.js';
+import { CartPage } from '../../pages/CartPage.js';
+import products from '../../data/products.js';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Order-dependent cascade (C01→C07) on the shared session (resetBetweenTests:
+// false), mirroring the reference repo and the auth slice. Each TC owns the
+// state it asserts and leaves the app where the next TC expects it (C03 lands on
+// the grid; C04–C06 operate there; C07 routes back).
+//
+// taqwright's `mobile` fixture is test-scoped (unavailable in beforeAll), so the
+// reference's "log in once in beforeAll" is emulated with the module-level
+// `initialized` flag: the first test logs in, the rest flow on the shared
+// session. Recovery on a retry relies on each TC's own waitForPageLoad — most
+// TCs stay within their screen context, so a re-run picks up in place. A full
+// retry-cascade-replay is deliberately deferred until/unless CI shows we need it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+let login: LoginPage;
+let landing: CatalogLandingPage;
+let grid: ProductGridPage;
+let cart: CartPage;
+let initialized = false;
+
+function buildPages(mobile: Mobile): void {
+  login = new LoginPage(mobile);
+  landing = new CatalogLandingPage(mobile);
+  grid = new ProductGridPage(mobile);
+  cart = new CartPage(mobile);
+}
+
+/**
+ * Guarantee we start on the catalog home. On the first run this just logs in.
+ * On a Playwright worker-restart-after-failure the module state resets and the
+ * shared (resetBetweenTests:false) session may be parked deep in the grid, so —
+ * mirroring the categories spec's ensureOnHome — back out to Home before
+ * anchoring. This keeps a failed C04 from poisoning the whole cascade in setup.
+ */
+async function ensureLoggedInOnHome(): Promise<void> {
+  if (await login.isVisible(login.loginButton)) {
+    await login.login(login.defaultUser, login.defaultPass);
+    await landing.waitForPageLoad();
+    return;
+  }
+  // Already authenticated — back out of any pushed screen until Home shows.
+  for (let i = 0; i < 4; i++) {
+    if (await landing.isVisible(landing.shopAllBtn)) return;
+    await landing.deviceBack();
+    await landing.settle(landing.settlePause);
+  }
+  await landing.waitForPageLoad();
+}
+
+test.describe('Catalog Module — Landing UI Master Check', () => {
+  test.beforeEach(async ({ mobile }) => {
+    buildPages(mobile);
+    // Emulated beforeAll: log in once at the start of the cascade; later TCs
+    // flow on the shared session without disturbing the state they inherit.
+    if (!initialized) {
+      await ensureLoggedInOnHome();
+      initialized = true;
+    }
+  });
+
+  test('TC-C01: homepage comprehensive UI and adaptive scroll', async () => {
+    await landing.waitForPageLoad();
+
+    await expect(landing.navMenuBtn).toBeVisible();
+    await expect(landing.title).toBeVisible();
+
+    await landing.scrollToCategory('Boho');
+    await expect(landing.categoryBoho).toBeVisible();
+
+    await landing.resetToTop();
+    await expect(landing.heroBanner).toBeVisible();
+  });
+
+  test('TC-C02: cart empty state from the homepage', async () => {
+    await landing.navigateToCart();
+    await cart.waitForPageLoad();
+
+    await expect(cart.cartTitle).toBeVisible();
+    await expect(cart.emptyCartMsg).toBeVisible();
+
+    await cart.clickContinueShopping();
+    await landing.waitForPageLoad();
+  });
+
+  test('TC-C03: "All Dresses" page default state', async () => {
+    await landing.navigateToShopAll();
+    await grid.waitForPageLoad();
+
+    const first = await grid.getFirstProductDetails();
+    expect(first).toContain(products.anchors.alphaFirst.name);
+  });
+
+  test('TC-C04: full catalog data integrity (all 32 items)', async () => {
+    // The 32-item scroll-collect scan can exceed the 180s default on the denser,
+    // slower-rendering tablet grid; mirror the reference's phone/tablet split.
+    const { width } = await grid.getWindowRect();
+    test.setTimeout(width > 1200 ? 300_000 : 180_000);
+    const intact = await grid.verifyFullCatalogIntegrity();
+    expect(intact).toBe(true);
+  });
+
+  test('TC-C05: all sorting modes via universal truths', async () => {
+    const sorts: Array<{ mode: 'LowHigh' | 'HighLow' | 'ZA' | 'AZ'; anchor: string }> = [
+      { mode: 'LowHigh', anchor: products.anchors.cheapest.price },
+      { mode: 'HighLow', anchor: products.anchors.mostExpensive.price },
+      { mode: 'ZA', anchor: products.anchors.alphaLast.name },
+      { mode: 'AZ', anchor: products.anchors.alphaFirst.name },
+    ];
+
+    const { width } = await grid.getWindowRect();
+    const isTablet = width > 1200;
+
+    await grid.resetToTop(3);
+
+    for (let i = 0; i < sorts.length; i++) {
+      await grid.openSortMenu();
+      await grid.selectSort(sorts[i].mode);
+      if (i === 0) await grid.resetToTop(isTablet ? 3 : 2);
+
+      const details = await grid.getFirstProductDetails();
+      expect(details).toContain(sorts[i].anchor);
+    }
+  });
+
+  test('TC-C06: cart empty state from the grid', async () => {
+    await grid.navigateToCart();
+    await cart.waitForPageLoad();
+    await expect(cart.cartTitle).toBeVisible();
+
+    await cart.clickContinueShopping();
+    await grid.waitForPageLoad();
+  });
+
+  test('TC-C07: "View All" hyperlink routing', async () => {
+    await grid.deviceBack();
+    await landing.waitForPageLoad();
+
+    await landing.navigateToViewAll();
+    await grid.waitForPageLoad();
+
+    const first = await grid.getFirstProductDetails();
+    expect(first).toContain(products.anchors.alphaFirst.name);
+  });
+});

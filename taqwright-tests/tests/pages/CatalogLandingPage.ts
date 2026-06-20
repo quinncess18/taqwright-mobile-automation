@@ -53,17 +53,42 @@ export class CatalogLandingPage extends BasePage {
     await this.viewAllCategoriesBtn.click();
   }
 
-  async selectCategory(name: string): Promise<void> {
-    const loc = name.includes('Casual')
+  private categoryLocator(name: string): Locator {
+    return name.includes('Casual')
       ? this.categoryCasual
       : name.includes('Evening')
         ? this.categoryEvening
         : name.includes('Party')
           ? this.categoryParty
           : this.categoryBoho;
+  }
+
+  /**
+   * Select a category by name, scrolling it on-screen first if needed. Mirrors
+   * the reference repo: only swipes when the card is physically off-screen, so
+   * an already-visible card is tapped without disturbing scroll position.
+   */
+  async selectCategory(name: string): Promise<void> {
+    const loc = this.categoryLocator(name);
     if (!(await this.isVisible(loc))) {
-      await loc.scrollIntoView();
+      const { width, height } = await this.getWindowRect();
+      const safeX = Math.round(width * 0.3);
+      await this.swipe(safeX, Math.round(height * 0.8), safeX, Math.round(height * 0.3), 1200);
     }
     await loc.click();
+  }
+
+  /**
+   * Bring a category banner into the comfort zone with a single fluid 50%
+   * swipe — only if it isn't already centred. Used by TC-C01's adaptive-scroll
+   * check. Mirrors the reference repo's scrollToCategory.
+   */
+  async scrollToCategory(name: string): Promise<void> {
+    const loc = this.categoryLocator(name);
+    if (!(await this.isInsideViewport(loc))) {
+      const { width, height } = await this.getWindowRect();
+      const safeX = Math.round(width * 0.3);
+      await this.swipe(safeX, Math.round(height * 0.7), safeX, Math.round(height * 0.2), 1200);
+    }
   }
 }

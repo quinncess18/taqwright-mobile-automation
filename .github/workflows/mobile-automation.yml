@@ -134,10 +134,12 @@ jobs:
             # cost inside TC-L01's waitForPageLoad.
             adb shell monkey -p com.taqelah.demo_app -c android.intent.category.LAUNCHER 1 || true
             sleep 10
-            # Scope mirrors the iOS lane — auth only for now; grows as each slice
-            # gets verified. CI=true is already set by GitHub, but pass it through
-            # explicitly so taqwright's retries:CI?2:1 is unambiguous in-script.
-            CI=true npx taqwright test --project=android tests/specs/01_auth
+            # Scope: auth + catalog (catalog is local-green on Android; this CI run
+            # confirms it on the slower ubuntu emulator). Runs FROM AUTH so TC-L01
+            # absorbs the cold boot and hands catalog a warm logged-in session.
+            # CI=true is already set by GitHub, but pass it through explicitly so
+            # taqwright's retries:CI?2:1 is unambiguous in-script.
+            CI=true npx taqwright test --project=android tests/specs/01_auth tests/specs/02_catalog
 
       - name: Upload report
         uses: actions/upload-artifact@v5
@@ -280,10 +282,12 @@ jobs:
           done
           echo "Appium did not come up"; exit 1
 
-      - name: Run iOS auth tests
+      - name: Run iOS auth + catalog tests
         # Scope grows as more slices get iOS selectors verified (mirrors the
-        # reference repo's incremental iOS coverage matrix). Auth only for now.
-        run: npx taqwright test --project=ios tests/specs/01_auth
+        # reference repo's incremental iOS coverage matrix). Catalog's iOS
+        # selectors are reference-iOS-proven; the per-card cart-icon check is
+        # Android-gated for now (iOS node nesting unconfirmed — see ProductGridPage).
+        run: npx taqwright test --project=ios tests/specs/01_auth tests/specs/02_catalog
 
       - name: Upload report
         uses: actions/upload-artifact@v5
