@@ -32,10 +32,6 @@ export class ProductGridPage extends BasePage {
   readonly sortOptionPriceLowHigh: Locator;
   readonly sortOptionPriceHighLow: Locator;
 
-  // Android-only positional app-bar buttons (iOS resolves geometrically).
-  private readonly sortBtnAndroid: Locator;
-  private readonly cartBtnAndroid: Locator;
-
   // iOS class-chain predicate for the nameless app-bar buttons.
   private static readonly IOS_NAMELESS_BTN =
     'type == "XCUIElementTypeButton" AND name == nil AND visible == 1';
@@ -63,10 +59,6 @@ export class ProductGridPage extends BasePage {
       ),
       () => mobile.getByClassChain('**/XCUIElementTypeImage[`name CONTAINS "$"`][1]'),
     );
-
-    // Android app-bar action buttons are the 2nd/3rd Buttons in the header.
-    this.sortBtnAndroid = mobile.getByUiSelector('new UiSelector().className("android.widget.Button").instance(1)');
-    this.cartBtnAndroid = mobile.getByUiSelector('new UiSelector().className("android.widget.Button").instance(2)');
 
     // Sort sheet — all options carry visible text → accessibility id on both.
     this.sortTitle = mobile.getByLabel('Sort By');
@@ -99,8 +91,20 @@ export class ProductGridPage extends BasePage {
     return which === 'cart' ? inBar[inBar.length - 1].el : inBar[0].el;
   }
 
+  /**
+   * Android app-bar action button by header position (2nd Button = Sort, 3rd =
+   * Cart). Built lazily at use-time, NOT in the constructor: `getByUiSelector`
+   * throws on iOS, so eager construction broke every catalog test on the iOS
+   * lane. iOS resolves these geometrically via `iosAppBarActionBtn` instead.
+   */
+  private androidAppBarBtn(instance: 1 | 2): Locator {
+    return this.mobile.getByUiSelector(
+      `new UiSelector().className("android.widget.Button").instance(${instance})`,
+    );
+  }
+
   async openSortMenu(): Promise<void> {
-    const btn = this.isIOS ? await this.iosAppBarActionBtn('sort') : this.sortBtnAndroid;
+    const btn = this.isIOS ? await this.iosAppBarActionBtn('sort') : this.androidAppBarBtn(1);
     await btn.click();
     await this.waitVisible(this.sortTitle);
   }
@@ -119,7 +123,7 @@ export class ProductGridPage extends BasePage {
   }
 
   async navigateToCart(): Promise<void> {
-    const btn = this.isIOS ? await this.iosAppBarActionBtn('cart') : this.cartBtnAndroid;
+    const btn = this.isIOS ? await this.iosAppBarActionBtn('cart') : this.androidAppBarBtn(2);
     await btn.click();
   }
 

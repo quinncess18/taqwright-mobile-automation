@@ -98,10 +98,14 @@ test.describe('Catalog Module — Landing UI Master Check', () => {
   });
 
   test('TC-C04: full catalog data integrity (all 32 items)', async () => {
-    // The 32-item scroll-collect scan can exceed the 180s default on the denser,
-    // slower-rendering tablet grid; mirror the reference's phone/tablet split.
+    // The 32-item scan is ~66s locally (settlePause=500) but ~3x slower under
+    // CI's settlePause=1500 on the weaker emulator — attempt 1 hit the 180s cap,
+    // and the forced mid-scan teardown corrupted UiAutomator2 and cascaded into
+    // C05–C11. Give it a 300s budget on CI (and on the denser/slower tablet) so
+    // the slow-but-working scan completes. Mirrors the reference's headroom.
     const { width } = await grid.getWindowRect();
-    test.setTimeout(width > 1200 ? 300_000 : 180_000);
+    const isTablet = width > 1200;
+    test.setTimeout(isTablet || process.env.CI ? 300_000 : 180_000);
     const intact = await grid.verifyFullCatalogIntegrity();
     expect(intact).toBe(true);
   });
