@@ -44,12 +44,14 @@ export default defineConfig({
   // than by inflating per-test/connection timeouts.
   timeout: 180_000,
   expectTimeout: 30_000,
-  // 2 retries on CI / 1 locally — mirrors the reference repo. This is how the
-  // reference absorbs the one-time WDA cold build on the first iOS session: an
-  // attempt that aborts while WDA is still compiling is retried, and the next
-  // attempt finds WDA already built and passes. A genuine failure fails every
-  // attempt. Android (run locally) gets 1 retry to absorb cold-boot render lag.
-  retries: process.env.CI ? 2 : 1,
+  // 1 retry everywhere. One retry absorbs the transient first-attempt costs we
+  // actually see — the iOS WDA cold build (a retried attempt finds WDA already
+  // built) and Android cold-boot render lag. A 2nd CI retry was dropped: a
+  // genuine failure that survives 2 attempts is already a real signal, and with
+  // taqwright's per-test session churn each extra attempt on a cascading failure
+  // adds minutes (a fully-red catalog run was overrunning an hour on retries
+  // alone). A 3rd attempt buys confirmation we don't need.
+  retries: 1,
   // Mobile/Appium sessions don't tolerate concurrent device access on one
   // emulator — run serially (mirrors the reference repo's workers:1).
   workers: 1,

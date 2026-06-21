@@ -32,6 +32,11 @@ export class ProductGridPage extends BasePage {
   readonly sortOptionPriceLowHigh: Locator;
   readonly sortOptionPriceHighLow: Locator;
 
+  // Search (catalog grid): the lone text input + its two result-state messages.
+  readonly searchField: Locator;
+  readonly noResultsMsg: Locator;
+  readonly searchCrashMsg: Locator;
+
   // iOS class-chain predicate for the nameless app-bar buttons.
   private static readonly IOS_NAMELESS_BTN =
     'type == "XCUIElementTypeButton" AND name == nil AND visible == 1';
@@ -66,6 +71,42 @@ export class ProductGridPage extends BasePage {
     this.sortOptionZA = mobile.getByLabel('Name (Z-A)');
     this.sortOptionPriceLowHigh = mobile.getByLabel('Price (Low-High)');
     this.sortOptionPriceHighLow = mobile.getByLabel('Price (High-Low)');
+
+    // Search field: the only text input on the catalog grid (placeholder
+    // "Search dresses..."). Android positional EditText; iOS the single
+    // TextField. (Flutter Key()s are not exposed as Appium ids in this app, so
+    // these mirror the LoginPage class/positional approach, not the test Keys.)
+    this.searchField = this.pick(
+      () => mobile.getByUiSelector('new UiSelector().className("android.widget.EditText").instance(0)'),
+      () => mobile.getByClassChain('**/XCUIElementTypeTextField'),
+    );
+    // Result-state messages (plain Flutter Text → a11y id on both platforms).
+    this.noResultsMsg = mobile.getByLabel('No dresses found');
+    this.searchCrashMsg = mobile.getByLabel('App crashed on search result');
+  }
+
+  /**
+   * Type a query into the catalog search field. Cross-platform typing mirrors
+   * LoginPage.typeField: Android `fill()` (IME inject); iOS clear→click→
+   * pressSequentially (single-shot fill leaves Flutter's controller empty).
+   */
+  async search(text: string): Promise<void> {
+    await this.waitVisible(this.searchField, 10_000);
+    if (this.isAndroid) {
+      await this.searchField.fill(text);
+    } else {
+      await this.searchField.clear();
+      if (text.length > 0) {
+        await this.searchField.click();
+        await this.searchField.pressSequentially(text);
+      }
+    }
+    await this.settle(this.settlePause);
+  }
+
+  /** Names of the product cards currently rendered (post-search/filter). */
+  async getVisibleProductNames(): Promise<string[]> {
+    return (await this.scanProductCards()).map((c) => c.name);
   }
 
   async waitForPageLoad(): Promise<void> {
