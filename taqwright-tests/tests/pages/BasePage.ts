@@ -164,6 +164,15 @@ export class BasePage {
   protected async scanProductCards(): Promise<
     Array<{ name: string; price: string; hasCartIcon: boolean }>
   > {
+    // iOS does NOT go through getPageSource: WDA's source serialization does not
+    // surface the Flutter card's "Name\n$Price" a11y string in a form the Android
+    // regex below can parse (the getPageSource scan was validated on Android only;
+    // on iOS it matched 0 cards in run 27867706941 → C04 collected names 0/32 on
+    // every attempt). TC-C03 proves the element-query path works on iOS, so reuse
+    // it. The per-element round-trips that crashed UiAutomator2 under load on
+    // Android are not a problem for WDA (the reference scanned iOS this way too).
+    if (this.isIOS) return this.scanProductCardsViaElements();
+
     const xml = await this.mobile.raw.getPageSource();
     const imgClass = this.isAndroid ? 'android.widget.ImageView' : 'XCUIElementTypeImage';
     const btnClass = this.isAndroid ? 'android.widget.Button' : 'XCUIElementTypeButton';
@@ -183,6 +192,31 @@ export class BasePage {
         hasCartIcon = inner.includes(`<${btnClass}`);
       }
       out.push({ name, price, hasCartIcon });
+    }
+    return out;
+  }
+
+  /**
+   * iOS card scan via element queries (the getPageSource path is Android-only).
+   * Query the priced product Images (name CONTAINS "$") and read each visible
+   * one's a11y descriptor ("Name\n$Price"). Mirrors getFirstProductDetails /
+   * TC-C03, which are proven on the iOS lane. Cart-icon presence is asserted on
+   * Android only (the iOS Image→Button nesting is unconfirmed — Phase D), so it
+   * is reported false here.
+   */
+  private async scanProductCardsViaElements(): Promise<
+    Array<{ name: string; price: string; hasCartIcon: boolean }>
+  > {
+    const out: Array<{ name: string; price: string; hasCartIcon: boolean }> = [];
+    const cards = await this.mobile
+      .getByClassChain('**/XCUIElementTypeImage[`name CONTAINS "$"`]')
+      .all();
+    for (const c of cards) {
+      if (!(await c.isVisible().catch(() => false))) continue;
+      const desc = await c.getAttribute(this.attrName).catch(() => null);
+      if (!desc || !desc.includes('$')) continue;
+      const [name, price] = desc.split('\n');
+      out.push({ name, price, hasCartIcon: false });
     }
     return out;
   }

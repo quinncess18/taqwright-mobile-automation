@@ -191,10 +191,18 @@ export class ProductGridPage extends BasePage {
       }
     };
 
+    const enough = () =>
+      collected.size >= totalGoal && (this.isIOS || cartVerified.size >= totalGoal);
+
     let scrollCount = 0;
     while (scrollCount < maxFlicks) {
       await scanVisible();
-      if (collected.size >= totalGoal && cartVerified.size >= totalGoal) break;
+      if (enough()) break;
+      // Re-scan the same position once (render-lag recovery — see the C04 note in
+      // verifyFullCatalogIntegrity) before scrolling on.
+      await this.settle(350);
+      await scanVisible();
+      if (enough()) break;
       // Smooth controlled half-viewport scroll (overlap keeps each row on-screen
       // across two snapshots); the swipe() built-in settle is the only pause.
       await this.swipe(safeX, Math.round(height * 0.78), safeX, Math.round(height * 0.42), 900);
@@ -275,6 +283,15 @@ export class ProductGridPage extends BasePage {
 
     let scrollCount = 0;
     while (!done() && scrollCount < maxFlicks) {
+      await scanVisible();
+      if (done()) break;
+      // Second look at the SAME position after a brief settle. On CI's
+      // render-lagged emulator a row occasionally misses the a11y tree on the
+      // first snapshot (run 27867706941: names 30/32, cartIcons 28/32 — a
+      // robustness near-miss, not a crash). A cheap re-scan recovers it without
+      // an extra flick, and reaching 32 sooner means the loop breaks EARLIER
+      // (not later), so this also tightens the CI time budget.
+      await this.settle(350);
       await scanVisible();
       if (done()) break;
       await this.swipe(
