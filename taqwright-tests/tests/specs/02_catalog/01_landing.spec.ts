@@ -54,6 +54,21 @@ async function ensureLoggedInOnHome(): Promise<void> {
   await landing.waitForPageLoad();
 }
 
+/**
+ * Guarantee the app is on the "All Dresses" product grid. C04–C07 inherit the
+ * grid from C03 on Android (resetBetweenTests:false keeps the screen on-screen
+ * across the per-test session boundary), but on iOS each session relaunches the
+ * app to Home, so the grid context is lost between tests and the scan would read
+ * the landing page (0 product cards). Re-enter the grid from Home when needed;
+ * a no-op when already on the grid (Android carryover).
+ */
+async function ensureOnGrid(): Promise<void> {
+  if (await grid.isVisible(grid.resultCount)) return;
+  await ensureLoggedInOnHome();
+  await landing.navigateToShopAll();
+  await grid.waitForPageLoad();
+}
+
 test.describe('Catalog Module — Landing UI Master Check', () => {
   test.beforeEach(async ({ mobile }) => {
     buildPages(mobile);
@@ -98,6 +113,7 @@ test.describe('Catalog Module — Landing UI Master Check', () => {
   });
 
   test('TC-C04: full catalog data integrity (all 32 items)', async () => {
+    await ensureOnGrid();
     // The 32-item scan is ~66s locally (settlePause=500) but ~3x slower under
     // CI's settlePause=1500 on the weaker emulator — attempt 1 hit the 180s cap,
     // and the forced mid-scan teardown corrupted UiAutomator2 and cascaded into
@@ -111,6 +127,7 @@ test.describe('Catalog Module — Landing UI Master Check', () => {
   });
 
   test('TC-C05: all sorting modes via universal truths', async () => {
+    await ensureOnGrid();
     const sorts: Array<{ mode: 'LowHigh' | 'HighLow' | 'ZA' | 'AZ'; anchor: string }> = [
       { mode: 'LowHigh', anchor: products.anchors.cheapest.price },
       { mode: 'HighLow', anchor: products.anchors.mostExpensive.price },
@@ -134,6 +151,7 @@ test.describe('Catalog Module — Landing UI Master Check', () => {
   });
 
   test('TC-C06: cart empty state from the grid', async () => {
+    await ensureOnGrid();
     await grid.navigateToCart();
     await cart.waitForPageLoad();
     await expect(cart.cartTitle).toBeVisible();
@@ -143,6 +161,7 @@ test.describe('Catalog Module — Landing UI Master Check', () => {
   });
 
   test('TC-C07: "View All" hyperlink routing', async () => {
+    await ensureOnGrid(); // iOS starts each session on Home; normalize to grid first
     await grid.deviceBack();
     await landing.waitForPageLoad();
 
