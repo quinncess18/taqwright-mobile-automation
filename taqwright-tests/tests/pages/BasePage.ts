@@ -1,5 +1,10 @@
 import { Mobile, Locator, Platform } from '@taqwright/taqwright';
 
+// TEMP DIAGNOSTIC (iOS C04 names 0/32 investigation) — dump the iOS grid tree
+// once per process so we can see why the priced-Image query returns 0 cards on
+// CI. REMOVE once the iOS scan is fixed. See [[catalog-scan-getpagesource]].
+let iosScanDiagDone = false;
+
 /**
  * BasePage — foundational Page Object for the Taqelah demo app, ported from
  * the WebdriverIO reference repo to taqwright's Playwright-ergonomics surface.
@@ -211,6 +216,7 @@ export class BasePage {
     const cards = await this.mobile
       .getByClassChain('**/XCUIElementTypeImage[`name CONTAINS "$"`]')
       .all();
+    await this.dumpIosScanDiag(cards); // TEMP — remove after iOS C04 fix
     for (const c of cards) {
       if (!(await c.isVisible().catch(() => false))) continue;
       const desc = await c.getAttribute(this.attrName).catch(() => null);
@@ -219,6 +225,44 @@ export class BasePage {
       out.push({ name, price, hasCartIcon: false });
     }
     return out;
+  }
+
+  /**
+   * TEMP DIAGNOSTIC — one-shot dump of the iOS grid tree to find why the priced
+   * product-Image query returns 0 usable cards on CI (C04 names 0/32) while
+   * TC-C03 reads a card fine with the same selector. Logs: how many nodes the
+   * priced query vs a bare Image query match, each priced node's
+   * visible/label/name/value, and every raw <XCUIElementTypeImage> from the page
+   * source. Guarded by a module flag (fires on the first scan only) and fully
+   * try/wrapped so it never perturbs the run. REMOVE once the scan is fixed.
+   */
+  private async dumpIosScanDiag(priced: Locator[]): Promise<void> {
+    if (!this.isIOS || iosScanDiagDone) return;
+    iosScanDiagDone = true;
+    try {
+      const allImgs = await this.mobile.getByClassChain('**/XCUIElementTypeImage').all();
+      console.log(
+        `[IOS-DIAG] priced-Image('name CONTAINS "$"').all()=${priced.length} ; ` +
+          `bare XCUIElementTypeImage.all()=${allImgs.length} ; attrName=${this.attrName}`,
+      );
+      for (let i = 0; i < Math.min(priced.length, 10); i++) {
+        const c = priced[i];
+        const vis = await c.isVisible().catch((e) => `ERR:${e}`);
+        const label = await c.getAttribute('label').catch(() => null);
+        const name = await c.getAttribute('name').catch(() => null);
+        const value = await c.getAttribute('value').catch(() => null);
+        console.log(
+          `[IOS-DIAG] priced[${i}] visible=${vis} | label=${JSON.stringify(label)} | ` +
+            `name=${JSON.stringify(name)} | value=${JSON.stringify(value)}`,
+        );
+      }
+      const xml = await this.mobile.raw.getPageSource();
+      const imgs = xml.match(/<XCUIElementTypeImage\b[^>]*>/g) ?? [];
+      console.log(`[IOS-DIAG] pageSource <XCUIElementTypeImage> nodes=${imgs.length}:`);
+      for (const node of imgs.slice(0, 40)) console.log(`[IOS-DIAG]   ${node.slice(0, 240)}`);
+    } catch (e) {
+      console.log(`[IOS-DIAG] dump failed: ${e}`);
+    }
   }
 
   /** Un-escape the XML entities Appium emits in page-source attribute values. */
