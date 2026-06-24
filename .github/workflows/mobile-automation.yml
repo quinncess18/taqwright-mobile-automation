@@ -91,7 +91,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Run Android auth tests
+      - name: Run Android test suite
         uses: reactivecircus/android-emulator-runner@v2
         env:
           APPIUM_HOME: ${{ github.workspace }}
@@ -282,7 +282,7 @@ jobs:
           done
           echo "Appium did not come up"; exit 1
 
-      - name: Run iOS auth + catalog tests
+      - name: Run iOS test suite
         # Scope grows as more slices get iOS selectors verified (mirrors the
         # reference repo's incremental iOS coverage matrix). Catalog's iOS
         # selectors are reference-iOS-proven; the per-card cart-icon check is
