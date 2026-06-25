@@ -127,6 +127,9 @@ test.describe('Catalog Module — Landing UI Master Check', () => {
   });
 
   test('TC-C05: all sorting modes via universal truths', async () => {
+    // iOS pays ~1m of per-test Appium/WDA session churn plus several app-bar +
+    // first-product reads; the default 180s is tight on CI. C04's headroom.
+    test.setTimeout(process.env.CI ? 300_000 : 180_000);
     await ensureOnGrid();
     const sorts: Array<{ mode: 'LowHigh' | 'HighLow' | 'ZA' | 'AZ'; anchor: string }> = [
       { mode: 'LowHigh', anchor: products.anchors.cheapest.price },
@@ -161,6 +164,7 @@ test.describe('Catalog Module — Landing UI Master Check', () => {
   });
 
   test('TC-C07: "View All" hyperlink routing', async () => {
+    test.setTimeout(process.env.CI ? 300_000 : 180_000); // iOS session-churn headroom
     await ensureOnGrid(); // iOS starts each session on Home; normalize to grid first
     await grid.deviceBack();
     await landing.waitForPageLoad();

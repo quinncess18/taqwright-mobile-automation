@@ -79,6 +79,10 @@ async function performCategoryFunctionalAudit(data: Category): Promise<void> {
 
 test.describe('Catalog Module — Category Data & Functional Integrity', () => {
   test.beforeEach(async ({ mobile }) => {
+    // Each category audit does a full grid scan + 4 sorts + cart entry; on CI the
+    // iOS lane also pays ~1m of per-test Appium/WDA session churn, so the default
+    // 180s is too tight (C08 timed out at 180s in run 28163303684). Mirror C04.
+    test.setTimeout(process.env.CI ? 300_000 : 180_000);
     buildPages(mobile);
     await ensureOnHome();
   });

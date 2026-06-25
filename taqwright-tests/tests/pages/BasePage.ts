@@ -142,6 +142,44 @@ export class BasePage {
   }
 
   /**
+   * Coordinate-based single tap via the raw W3C pointer. Used on iOS to actuate
+   * an app-bar action whose centre we resolved from the page source (one
+   * getPageSource) instead of the per-element `.all()`+boundingBox storm.
+   */
+  async tapAt(x: number, y: number): Promise<void> {
+    await this.mobile.raw.performActions([
+      {
+        type: 'pointer',
+        id: 'finger1',
+        parameters: { pointerType: 'touch' },
+        actions: [
+          { type: 'pointerMove', duration: 0, x, y },
+          { type: 'pointerDown', button: 0 },
+          { type: 'pointerUp', button: 0 },
+        ],
+      },
+    ]);
+    await this.mobile.raw.releaseActions();
+  }
+
+  /**
+   * iOS: read the descriptor ("Name\n$Price") of the first VISIBLE priced
+   * product card from a single getPageSource — replaces the `.all()`+per-card
+   * getAttribute storm that made `getFirstProductDetails` take ~1.5m on the iOS
+   * lane. Returns null if no visible priced card is present.
+   */
+  protected async firstVisibleProductDesc(): Promise<string | null> {
+    const xml = await this.mobile.raw.getPageSource();
+    const re = /<XCUIElementTypeImage\b[^>]*?\blabel="([^"]*\$[^"]*)"[^>]*?>/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(xml)) !== null) {
+      if (!/\bvisible="true"/.test(m[0])) continue;
+      return this.decodeXmlEntities(m[1]);
+    }
+    return null;
+  }
+
+  /**
    * Single-shot structural scan of the CURRENT page source for product cards.
    *
    * One `getPageSource()` per scan replaces the per-element `.all()` +

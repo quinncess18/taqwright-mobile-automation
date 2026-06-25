@@ -114,22 +114,55 @@ export class ProductGridPage extends BasePage {
   }
 
   /**
-   * iOS only: resolve a grid app-bar action button by position. Both the Sort
-   * and Cart icons are nameless, so filter the nameless visible buttons to the
-   * top app-bar band (per-card add buttons start well below it), then order by
-   * x: leftmost = Sort, rightmost = Cart (matches Android instance(1)/(2)).
+   * iOS: actuate a grid app-bar action (Sort/Cart) by tapping its centre,
+   * resolved from a SINGLE getPageSource. Both icons are nameless, so we parse
+   * the nameless, visible, non-zero-size Button nodes in the top app-bar band
+   * (per-card add buttons sit far below it), order by x (leftmost = Sort,
+   * rightmost = Cart), and tap the centre — mirroring the Android
+   * instance(1)/(2) ordering and the previous boundingBox logic, but in one
+   * round-trip instead of `.all()`+N×boundingBox (which made C05/C08–C11 time
+   * out on the iOS lane). Falls back to the live-element path if the parse finds
+   * nothing, so a source-shape surprise can't regress the (passing) cart tests.
    */
-  private async iosAppBarActionBtn(which: 'sort' | 'cart'): Promise<Locator> {
+  private async tapIosAppBarAction(which: 'sort' | 'cart'): Promise<void> {
     const APP_BAR_BAND = 120; // app-bar height; per-card buttons sit far below
-    const btns = await this.mobile.getByPredicate(ProductGridPage.IOS_NAMELESS_BTN).all();
-    const inBar: { el: Locator; x: number }[] = [];
-    for (const el of btns) {
-      const box = await el.boundingBox();
-      if (box.y < APP_BAR_BAND) inBar.push({ el, x: box.x });
+    const xml = await this.mobile.raw.getPageSource();
+    const btnRe = /<XCUIElementTypeButton\b[^>]*?>/g;
+    const num = (tag: string, attr: string): number | null => {
+      const mm = tag.match(new RegExp(`\\b${attr}="(-?\\d+)"`));
+      return mm ? parseInt(mm[1], 10) : null;
+    };
+    const cands: Array<{ cx: number; cy: number; x: number }> = [];
+    let m: RegExpExecArray | null;
+    while ((m = btnRe.exec(xml)) !== null) {
+      const tag = m[0];
+      const name = tag.match(/\bname="([^"]*)"/);
+      if (name && name[1].length > 0) continue; // app-bar icons are nameless
+      if (!/\bvisible="true"/.test(tag)) continue;
+      const x = num(tag, 'x');
+      const y = num(tag, 'y');
+      const w = num(tag, 'width');
+      const h = num(tag, 'height');
+      if (x === null || y === null || !w || !h) continue;
+      if (y >= APP_BAR_BAND) continue;
+      cands.push({ cx: Math.round(x + w / 2), cy: Math.round(y + h / 2), x });
     }
-    inBar.sort((a, b) => a.x - b.x);
-    if (inBar.length === 0) throw new Error(`iOS grid app-bar ${which} button not found`);
-    return which === 'cart' ? inBar[inBar.length - 1].el : inBar[0].el;
+    if (cands.length === 0) {
+      // Fallback: the proven live-element path (slow but safe).
+      const btns = await this.mobile.getByPredicate(ProductGridPage.IOS_NAMELESS_BTN).all();
+      const inBar: { el: Locator; x: number }[] = [];
+      for (const el of btns) {
+        const box = await el.boundingBox();
+        if (box.y < APP_BAR_BAND) inBar.push({ el, x: box.x });
+      }
+      inBar.sort((a, b) => a.x - b.x);
+      if (inBar.length === 0) throw new Error(`iOS grid app-bar ${which} button not found`);
+      await (which === 'cart' ? inBar[inBar.length - 1].el : inBar[0].el).click();
+      return;
+    }
+    cands.sort((a, b) => a.x - b.x);
+    const pick = which === 'cart' ? cands[cands.length - 1] : cands[0];
+    await this.tapAt(pick.cx, pick.cy);
   }
 
   /**
@@ -145,8 +178,11 @@ export class ProductGridPage extends BasePage {
   }
 
   async openSortMenu(): Promise<void> {
-    const btn = this.isIOS ? await this.iosAppBarActionBtn('sort') : this.androidAppBarBtn(1);
-    await btn.click();
+    if (this.isIOS) {
+      await this.tapIosAppBarAction('sort');
+    } else {
+      await this.androidAppBarBtn(1).click();
+    }
     await this.waitVisible(this.sortTitle);
   }
 
@@ -164,8 +200,11 @@ export class ProductGridPage extends BasePage {
   }
 
   async navigateToCart(): Promise<void> {
-    const btn = this.isIOS ? await this.iosAppBarActionBtn('cart') : this.androidAppBarBtn(2);
-    await btn.click();
+    if (this.isIOS) {
+      await this.tapIosAppBarAction('cart');
+    } else {
+      await this.androidAppBarBtn(2).click();
+    }
   }
 
   /**
@@ -189,12 +228,11 @@ export class ProductGridPage extends BasePage {
    */
   async getFirstProductDetails(): Promise<string> {
     if (this.isIOS) {
-      const cards = await this.clickableItems.all();
-      for (const c of cards) {
-        if (!(await c.isVisible().catch(() => false))) continue;
-        const desc = await c.getAttribute(this.attrName);
-        if (desc && desc.includes('$')) return desc;
-      }
+      // One getPageSource instead of `.all()`+per-card getAttribute (the latter
+      // took ~1.5m/call on WDA). Returns the first VISIBLE priced card in
+      // document order = top-left. See BasePage.firstVisibleProductDesc.
+      const desc = await this.firstVisibleProductDesc();
+      if (desc) return desc;
       throw new Error('iOS: no visible priced product card found in grid');
     }
     await this.firstProductCard.waitFor({ state: 'visible', timeout: 5000 });
@@ -239,13 +277,11 @@ export class ProductGridPage extends BasePage {
     while (scrollCount < maxFlicks) {
       await scanVisible();
       if (enough()) break;
-      // Re-scan the same position once (render-lag recovery — see the C04 note in
-      // verifyFullCatalogIntegrity) before scrolling on.
-      await this.settle(350);
-      await scanVisible();
-      if (enough()) break;
-      // Smooth controlled half-viewport scroll (overlap keeps each row on-screen
-      // across two snapshots); the swipe() built-in settle is the only pause.
+      // One scan per position (the same-position re-scan was dropped to halve the
+      // getPageSource load — it was stressing the CI Android UiAutomator2
+      // instrumentation into crashing under the full scan, and slowing the iOS
+      // lane). The half-viewport overlap below keeps every row on-screen across
+      // two consecutive positions, so each row still gets two scan chances.
       await this.swipe(safeX, Math.round(height * 0.78), safeX, Math.round(height * 0.42), 900);
       scrollCount++;
     }
@@ -326,15 +362,13 @@ export class ProductGridPage extends BasePage {
     while (!done() && scrollCount < maxFlicks) {
       await scanVisible();
       if (done()) break;
-      // Second look at the SAME position after a brief settle. On CI's
-      // render-lagged emulator a row occasionally misses the a11y tree on the
-      // first snapshot (run 27867706941: names 30/32, cartIcons 28/32 — a
-      // robustness near-miss, not a crash). A cheap re-scan recovers it without
-      // an extra flick, and reaching 32 sooner means the loop breaks EARLIER
-      // (not later), so this also tightens the CI time budget.
-      await this.settle(350);
-      await scanVisible();
-      if (done()) break;
+      // One scan per position. The same-position re-scan (added for a CI
+      // render-lag near-miss) was dropped because doubling the getPageSource
+      // load over C04's full traversal was crashing the CI Android UiAutomator2
+      // instrumentation (`socket hang up` → "instrumentation not running") and
+      // slowing the iOS lane past its budget. The half-viewport overlap below
+      // keeps each row on-screen across two consecutive positions, so every row
+      // still gets two scan chances; the final bottom-tug scan catches the last.
       await this.swipe(
         safeX,
         Math.round(height * 0.8),
