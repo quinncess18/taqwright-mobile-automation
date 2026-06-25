@@ -1,5 +1,13 @@
 import { Mobile, Locator, Platform } from '@taqwright/taqwright';
 
+// TEMP DIAGNOSTIC (remove once the iOS grid source shape is captured). When true,
+// the iOS card scan dumps one getPageSource of the grid (logging the node/attr
+// shape around each "$") and then returns no cards, so we learn whether the
+// price lives in label/value/name without running the slow per-element WDA storm
+// that starved the runner in run 28084577229. Pairs with the iOS maxFlicks cap
+// in ProductGridPage so the diagnostic run finishes well inside the job budget.
+export const IOS_SCAN_DIAG = true;
+
 /**
  * BasePage — foundational Page Object for the Taqelah demo app, ported from
  * the WebdriverIO reference repo to taqwright's Playwright-ergonomics surface.
@@ -171,7 +179,13 @@ export class BasePage {
     // every attempt). TC-C03 proves the element-query path works on iOS, so reuse
     // it. The per-element round-trips that crashed UiAutomator2 under load on
     // Android are not a problem for WDA (the reference scanned iOS this way too).
-    if (this.isIOS) return this.scanProductCardsViaElements();
+    if (this.isIOS) {
+      if (IOS_SCAN_DIAG) {
+        await this.dumpIosGridSource();
+        return [];
+      }
+      return this.scanProductCardsViaElements();
+    }
 
     const xml = await this.mobile.raw.getPageSource();
     const imgClass = this.isAndroid ? 'android.widget.ImageView' : 'XCUIElementTypeImage';
@@ -219,6 +233,38 @@ export class BasePage {
       out.push({ name, price, hasCartIcon: false });
     }
     return out;
+  }
+
+  /**
+   * TEMP DIAGNOSTIC: dump ONE iOS grid page-source so we can see the real node
+   * and attribute shape carrying the "Name\n$Price" descriptor (the earlier
+   * getPageSource regex matched 0 on iOS — this reveals whether the price is in
+   * label/value/name and how the newline is encoded). Logs windows around each
+   * "$" plus the first few Image nodes; runs at most once. Remove with
+   * IOS_SCAN_DIAG once the iOS getPageSource parser is written.
+   */
+  private static iosSrcDumped = false;
+  private async dumpIosGridSource(): Promise<void> {
+    if (BasePage.iosSrcDumped) return;
+    BasePage.iosSrcDumped = true;
+    try {
+      const xml = await this.mobile.raw.getPageSource();
+      console.log(`[IOS-SRC] length=${xml.length}`);
+      let idx = xml.indexOf('$');
+      let n = 0;
+      while (idx !== -1 && n < 8) {
+        console.log(`[IOS-SRC] $@${idx}: ${xml.slice(Math.max(0, idx - 260), idx + 60)}`);
+        idx = xml.indexOf('$', idx + 1);
+        n++;
+      }
+      if (n === 0) console.log('[IOS-SRC] no "$" present in source text');
+      const imgRe = /<XCUIElementTypeImage\b[^>]*>/g;
+      const imgs = xml.match(imgRe) ?? [];
+      console.log(`[IOS-SRC] XCUIElementTypeImage opens=${imgs.length}`);
+      imgs.slice(0, 6).forEach((node, i) => console.log(`[IOS-SRC] img[${i}]: ${node}`));
+    } catch (e) {
+      console.log(`[IOS-SRC] dump failed: ${String(e)}`);
+    }
   }
 
   /** Un-escape the XML entities Appium emits in page-source attribute values. */

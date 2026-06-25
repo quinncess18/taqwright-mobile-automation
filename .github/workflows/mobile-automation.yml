@@ -164,6 +164,11 @@ jobs:
     name: iOS (Simulator)
     runs-on: macos-14 # Apple Silicon; matches the .app's arm64 simulator slice.
     # Independent of the Android job — runs in parallel, doesn't block on it.
+    # Guardrail: a runaway iOS scan (e.g. the per-element WDA round-trip storm
+    # that starved the runner in run 28084577229 at ~60m → "lost communication")
+    # should fail fast with readable logs, not burn a full job slot to a runner
+    # death. The healthy suite is ~16m, so 30m leaves ample headroom.
+    timeout-minutes: 30
 
     env:
       IOS_SIM_NAME: "iPhone 15"
