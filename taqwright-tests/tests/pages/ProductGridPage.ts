@@ -1,5 +1,5 @@
 import { Mobile, Locator } from '@taqwright/taqwright';
-import { BasePage, IOS_SCAN_DIAG } from './BasePage.js';
+import { BasePage } from './BasePage.js';
 import type { Category } from '../data/products.js';
 
 /**
@@ -213,9 +213,7 @@ export class ProductGridPage extends BasePage {
   async verifyCategoryIntegrity(categoryData: Category): Promise<boolean> {
     const collected = new Set<string>();
     const cartVerified = new Set<string>();
-    // TEMP: the iOS source-dump diagnostic returns no cards, so cap the flicks
-    // on iOS to keep the run fast (remove with IOS_SCAN_DIAG).
-    const maxFlicks = IOS_SCAN_DIAG && this.isIOS ? 2 : 12;
+    const maxFlicks = 12;
     const totalGoal = categoryData.count;
 
     const { width, height } = await this.getWindowRect();
@@ -302,9 +300,7 @@ export class ProductGridPage extends BasePage {
     // traversal with half-viewport overlap is ~22 flicks; 45 leaves headroom and
     // still finishes well inside the test budget. The loop breaks as soon as both
     // names and cart-icons reach 32.
-    // TEMP: the iOS source-dump diagnostic returns no cards, so cap the flicks
-    // on iOS to keep the run fast (remove with IOS_SCAN_DIAG).
-    const maxFlicks = IOS_SCAN_DIAG && this.isIOS ? 2 : 45;
+    const maxFlicks = 45;
     const totalGoal = 32;
 
     const { width, height } = await this.getWindowRect();

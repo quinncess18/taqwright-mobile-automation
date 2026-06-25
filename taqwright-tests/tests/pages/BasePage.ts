@@ -1,13 +1,5 @@
 import { Mobile, Locator, Platform } from '@taqwright/taqwright';
 
-// TEMP DIAGNOSTIC (remove once the iOS grid source shape is captured). When true,
-// the iOS card scan dumps one getPageSource of the grid (logging the node/attr
-// shape around each "$") and then returns no cards, so we learn whether the
-// price lives in label/value/name without running the slow per-element WDA storm
-// that starved the runner in run 28084577229. Pairs with the iOS maxFlicks cap
-// in ProductGridPage so the diagnostic run finishes well inside the job budget.
-export const IOS_SCAN_DIAG = true;
-
 /**
  * BasePage — foundational Page Object for the Taqelah demo app, ported from
  * the WebdriverIO reference repo to taqwright's Playwright-ergonomics surface.
@@ -172,21 +164,15 @@ export class BasePage {
   protected async scanProductCards(): Promise<
     Array<{ name: string; price: string; hasCartIcon: boolean }>
   > {
-    // iOS does NOT go through getPageSource: WDA's source serialization does not
-    // surface the Flutter card's "Name\n$Price" a11y string in a form the Android
-    // regex below can parse (the getPageSource scan was validated on Android only;
-    // on iOS it matched 0 cards in run 27867706941 → C04 collected names 0/32 on
-    // every attempt). TC-C03 proves the element-query path works on iOS, so reuse
-    // it. The per-element round-trips that crashed UiAutomator2 under load on
-    // Android are not a problem for WDA (the reference scanned iOS this way too).
-    if (this.isIOS) {
-      if (IOS_SCAN_DIAG) {
-        await this.dumpIosGridSource();
-        return [];
-      }
-      return this.scanProductCardsViaElements();
-    }
-
+    // BOTH platforms go through a single getPageSource per scan. The iOS grid
+    // source was dumped in run 28150865058 ([IOS-SRC]) and carries each product
+    // card as `<XCUIElementTypeImage name="Name&#10;$Price" label="Name&#10;$Price"
+    // .../>` — the SAME shape the Android regex expects (attrName=label on iOS).
+    // The earlier "iOS getPageSource matched 0 cards" (run 27867706941) was a
+    // misdiagnosis: iOS was on Home pre-ensureOnGrid, so there were genuinely 0
+    // cards on screen — the regex was never broken. Using getPageSource on iOS
+    // too replaces the per-element `.all()`+getAttribute round-trip storm that
+    // starved the runner in run 28084577229 (one round-trip per scan, not ~16).
     const xml = await this.mobile.raw.getPageSource();
     const imgClass = this.isAndroid ? 'android.widget.ImageView' : 'XCUIElementTypeImage';
     const btnClass = this.isAndroid ? 'android.widget.Button' : 'XCUIElementTypeButton';
@@ -201,6 +187,9 @@ export class BasePage {
       let hasCartIcon = false;
       if (m[2] !== '/') {
         // Open (non-self-closing) Image → inspect its children for the Button.
+        // On iOS every product Image is self-closing (no child Button in the
+        // source), so hasCartIcon stays false there — matching the iOS cart-icon
+        // gating in ProductGridPage (Phase D re-confirms before un-gating).
         const close = xml.indexOf(`</${imgClass}>`, re.lastIndex);
         const inner = close === -1 ? xml.slice(re.lastIndex) : xml.slice(re.lastIndex, close);
         hasCartIcon = inner.includes(`<${btnClass}`);
@@ -208,63 +197,6 @@ export class BasePage {
       out.push({ name, price, hasCartIcon });
     }
     return out;
-  }
-
-  /**
-   * iOS card scan via element queries (the getPageSource path is Android-only).
-   * Query the priced product Images (name CONTAINS "$") and read each visible
-   * one's a11y descriptor ("Name\n$Price"). Mirrors getFirstProductDetails /
-   * TC-C03, which are proven on the iOS lane. Cart-icon presence is asserted on
-   * Android only (the iOS Image→Button nesting is unconfirmed — Phase D), so it
-   * is reported false here.
-   */
-  private async scanProductCardsViaElements(): Promise<
-    Array<{ name: string; price: string; hasCartIcon: boolean }>
-  > {
-    const out: Array<{ name: string; price: string; hasCartIcon: boolean }> = [];
-    const cards = await this.mobile
-      .getByClassChain('**/XCUIElementTypeImage[`name CONTAINS "$"`]')
-      .all();
-    for (const c of cards) {
-      if (!(await c.isVisible().catch(() => false))) continue;
-      const desc = await c.getAttribute(this.attrName).catch(() => null);
-      if (!desc || !desc.includes('$')) continue;
-      const [name, price] = desc.split('\n');
-      out.push({ name, price, hasCartIcon: false });
-    }
-    return out;
-  }
-
-  /**
-   * TEMP DIAGNOSTIC: dump ONE iOS grid page-source so we can see the real node
-   * and attribute shape carrying the "Name\n$Price" descriptor (the earlier
-   * getPageSource regex matched 0 on iOS — this reveals whether the price is in
-   * label/value/name and how the newline is encoded). Logs windows around each
-   * "$" plus the first few Image nodes; runs at most once. Remove with
-   * IOS_SCAN_DIAG once the iOS getPageSource parser is written.
-   */
-  private static iosSrcDumped = false;
-  private async dumpIosGridSource(): Promise<void> {
-    if (BasePage.iosSrcDumped) return;
-    BasePage.iosSrcDumped = true;
-    try {
-      const xml = await this.mobile.raw.getPageSource();
-      console.log(`[IOS-SRC] length=${xml.length}`);
-      let idx = xml.indexOf('$');
-      let n = 0;
-      while (idx !== -1 && n < 8) {
-        console.log(`[IOS-SRC] $@${idx}: ${xml.slice(Math.max(0, idx - 260), idx + 60)}`);
-        idx = xml.indexOf('$', idx + 1);
-        n++;
-      }
-      if (n === 0) console.log('[IOS-SRC] no "$" present in source text');
-      const imgRe = /<XCUIElementTypeImage\b[^>]*>/g;
-      const imgs = xml.match(imgRe) ?? [];
-      console.log(`[IOS-SRC] XCUIElementTypeImage opens=${imgs.length}`);
-      imgs.slice(0, 6).forEach((node, i) => console.log(`[IOS-SRC] img[${i}]: ${node}`));
-    } catch (e) {
-      console.log(`[IOS-SRC] dump failed: ${String(e)}`);
-    }
   }
 
   /** Un-escape the XML entities Appium emits in page-source attribute values. */

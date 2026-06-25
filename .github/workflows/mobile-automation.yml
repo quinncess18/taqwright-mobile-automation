@@ -167,8 +167,10 @@ jobs:
     # Guardrail: a runaway iOS scan (e.g. the per-element WDA round-trip storm
     # that starved the runner in run 28084577229 at ~60m → "lost communication")
     # should fail fast with readable logs, not burn a full job slot to a runner
-    # death. The healthy suite is ~16m, so 30m leaves ample headroom.
-    timeout-minutes: 30
+    # death. A healthy 24-test iOS suite runs ~25m — most of it taqwright's
+    # per-test Appium/WDA session create+destroy (~1-2m/test on iOS), not the
+    # scan — so 45m leaves headroom while still capping a true runaway.
+    timeout-minutes: 45
 
     env:
       IOS_SIM_NAME: "iPhone 15"
